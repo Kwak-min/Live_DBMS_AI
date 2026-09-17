@@ -1,0 +1,19 @@
+# Local agent artifacts
+.codegraph/
+.omo/
+
+# Dependencies and generated files
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
