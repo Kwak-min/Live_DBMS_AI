@@ -1,9 +1,11 @@
 # Docs
 
-요구사항·API·이벤트 명세를 관리합니다.
+프로젝트의 개발 명세와 협업 규칙을 관리합니다.
 
-- requirements.md: 요구사항 명세
-- api.md: REST API 명세
-- events.md: 실시간 메시지 및 수집·장애 이벤트 명세
+- [백엔드 업무 분배](backend-responsibilities.md): A·B·C 담당 업무, 산출물, 데이터 흐름
+- [협업 가이드](contributing.md): 브랜치 구조, 커밋·PR 규칙, 공통 개발 규칙 및 사전 합의
+- [요구사항 명세](requirements.md): 작성 예정
+- [API 명세](api.md): 작성 예정
+- [이벤트 명세](events.md): 작성 예정
 
-각 명세 파일은 현재 작성용 틀이며 확정된 구현 계약이 아닙니다.
+[프로젝트 소개로 돌아가기](../README.md)
