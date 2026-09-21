@@ -17,7 +17,7 @@ Live_DBMS_AI/
 
 - [백엔드 업무 분배 및 데이터 흐름](docs/backend-responsibilities.md)
 - [브랜치·커밋·PR 규칙 및 사전 합의](docs/contributing.md)
-- [요구사항 명세](docs/requirements.md) — 작성 예정
+- [백엔드 기능 요구사항](docs/backend-functional-requirements.md)
 - [API 명세](docs/api.md) — 작성 예정
 - [이벤트 명세](docs/events.md) — 작성 예정
 
