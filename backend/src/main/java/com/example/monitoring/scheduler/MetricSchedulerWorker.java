@@ -4,11 +4,16 @@ import com.example.monitoring.collector.DbMetricsCollector;
 import com.example.monitoring.domain.CollectionStatus;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.MetricData;
+import com.example.monitoring.domain.RiskSeverity;
 import com.example.monitoring.domain.TargetDbStatus;
+import com.example.monitoring.dto.IncidentCreatedEvent;
 import com.example.monitoring.dto.MetricCollectedEvent;
+import com.example.monitoring.infrastructure.redis.IncidentPublisher;
 import com.example.monitoring.infrastructure.redis.RedisStreamPublisher;
 import com.example.monitoring.repository.DatabaseConfigRepository;
 import com.example.monitoring.repository.MetricDataRepository;
+import com.example.monitoring.service.ProjectIsolationService;
+import com.example.monitoring.service.RiskAssessmentEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,6 +36,9 @@ public class MetricSchedulerWorker {
     private final MetricDataRepository metricDataRepository;
     private final DbMetricsCollector dbMetricsCollector;
     private final RedisStreamPublisher redisStreamPublisher;
+    private final RiskAssessmentEngine riskAssessmentEngine;
+    private final IncidentPublisher incidentPublisher;
+    private final ProjectIsolationService projectIsolationService;
 
     private final ExecutorService collectionExecutor = Executors.newFixedThreadPool(10);
 
@@ -54,10 +62,10 @@ public class MetricSchedulerWorker {
     private void processSingleTarget(DatabaseConfig config) {
         LocalDateTime attemptTime = LocalDateTime.now();
         try {
-            // 1. Extract Metrics
+            // 1. 메트릭 수집
             MetricData metricData = dbMetricsCollector.collectMetrics(config);
 
-            // 2. Update Database Config Status
+            // 2. DatabaseConfig 상태 업데이트
             if (metricData.getCollectionStatus() == CollectionStatus.SUCCESS) {
                 config.setStatus(TargetDbStatus.UP);
                 config.setLastErrorMessage(null);
@@ -68,10 +76,10 @@ public class MetricSchedulerWorker {
             config.setLastCheckedAt(attemptTime);
             databaseConfigRepository.save(config);
 
-            // 3. Save Metric Snapshot to System Database (PostgreSQL)
+            // 3. 메트릭 스냅샷 저장 (PostgreSQL)
             MetricData savedMetric = metricDataRepository.save(metricData);
 
-            // 4. Build and Publish MetricCollectedEvent to Redis Streams MQ
+            // 4. MetricCollectedEvent 빌드
             MetricCollectedEvent event = MetricCollectedEvent.builder()
                     .databaseConfigId(config.getId())
                     .databaseName(config.getName())
@@ -92,10 +100,26 @@ public class MetricSchedulerWorker {
                     .errorMessage(savedMetric.getErrorMessage())
                     .build();
 
+            // 5. MetricCollectedEvent → Redis Streams 발행
             redisStreamPublisher.publish(event);
+
+            // 6. 위험도 평가
+            List<IncidentCreatedEvent> incidents = riskAssessmentEngine.evaluateRisk(event);
+
+            // 7. 인시던트별 처리: Redis 발행 + FATAL 자동 차단
+            for (IncidentCreatedEvent incident : incidents) {
+                incidentPublisher.publish(incident);
+
+                if (incident.getSeverity() == RiskSeverity.FATAL) {
+                    log.warn("[Scheduler] FATAL incident detected for DB [id={}, name={}]. Triggering auto-block.",
+                            config.getId(), config.getName());
+                    projectIsolationService.autoBlockOnFatalIncident(incident);
+                }
+            }
 
         } catch (Exception e) {
             log.error("Unhandled exception during collection execution for dbId: {}", config.getId(), e);
         }
     }
 }
+
