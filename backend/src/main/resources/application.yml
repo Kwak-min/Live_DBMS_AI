@@ -37,6 +37,10 @@ app:
     enabled: true
     fixed-rate-ms: 5000
     connection-timeout-seconds: 5
+  metrics:
+    retention-days: 30
+    retention-cleanup-enabled: true
+    retention-cleanup-cron: "0 0 3 * * *"
 
 springdoc:
   api-docs:
