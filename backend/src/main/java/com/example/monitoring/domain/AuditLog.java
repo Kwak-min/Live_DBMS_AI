@@ -3,10 +3,11 @@ package com.example.monitoring.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.UUID;
 
 @Entity
-@Table(name = "audit_logs")
+@Table(name = "access_logs", indexes = @Index(name = "idx_access_logs_occurred_id", columnList = "occurred_at,id"))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,29 +19,33 @@ public class AuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private Long actorId;
+
+    @Column(nullable = false, length = 16)
+    private String method;
+
+    @Column(nullable = false, length = 500)
+    private String path;
+
+    @Column(nullable = false)
+    private Integer statusCode;
+
+    @Column(nullable = false)
+    private Long durationMs;
+
     @Column(nullable = false, length = 45)
     private String clientIp;
 
-    @Column(length = 10)
-    private String httpMethod;
-
-    @Column(length = 500)
-    private String requestUri;
-
-    @Column(length = 500)
-    private String userAgent;
-
-    private Integer httpStatus;
-
-    private Long executionTimeMs;
+    @Column(nullable = false, updatable = false)
+    private Instant occurredAt;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime timestamp;
+    private UUID requestId;
 
     @PrePersist
     protected void onCreate() {
-        if (timestamp == null) {
-            timestamp = LocalDateTime.now();
+        if (occurredAt == null) {
+            occurredAt = Instant.now();
         }
     }
 }

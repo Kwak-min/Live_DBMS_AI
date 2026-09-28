@@ -11,6 +11,7 @@ coverage/
 
 # Java / Gradle build artifacts
 .gradle/
+backend/gradle-user-home/
 bin/
 *.class
 
