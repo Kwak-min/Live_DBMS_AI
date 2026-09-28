@@ -2,6 +2,7 @@ package com.example.monitoring.collector;
 
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.MetricData;
+import com.example.monitoring.database.port.CollectorTarget;
 
 public interface DbMetricsCollector {
     
@@ -12,5 +13,5 @@ public interface DbMetricsCollector {
      * @param config Database connection configuration
      * @return MetricData snapshot with collection status
      */
-    MetricData collectMetrics(DatabaseConfig config);
+    MetricData collectMetrics(DatabaseConfig config, CollectorTarget target);
 }

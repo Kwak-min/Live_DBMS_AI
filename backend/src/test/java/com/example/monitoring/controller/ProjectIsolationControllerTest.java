@@ -4,13 +4,19 @@ import com.example.monitoring.domain.BlockedReason;
 import com.example.monitoring.domain.TargetDbStatus;
 import com.example.monitoring.dto.BlockStatusResponseDto;
 import com.example.monitoring.service.ProjectIsolationService;
+import com.example.monitoring.auth.service.AuthService;
+import com.example.monitoring.auth.service.CsrfTokenService;
+import com.example.monitoring.auth.service.RequestOriginValidator;
+import com.example.monitoring.auth.web.ApiSecurityErrorWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ProjectIsolationController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @DisplayName("ProjectIsolationController 슬라이스 테스트")
 class ProjectIsolationControllerTest {
 
@@ -35,6 +42,18 @@ class ProjectIsolationControllerTest {
 
     @MockBean
     private ProjectIsolationService projectIsolationService;
+
+    @MockBean
+    private StringRedisTemplate redisTemplate;
+
+    @MockBean
+    private AuthService authService;
+
+    @MockBean
+    private ApiSecurityErrorWriter apiSecurityErrorWriter;
+
+    @MockBean private CsrfTokenService csrfTokenService;
+    @MockBean private RequestOriginValidator requestOriginValidator;
 
     private static final String BASE_URL = "/api/v1/projects";
 
