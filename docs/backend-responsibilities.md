@@ -1,6 +1,6 @@
 # 백엔드 업무 분배
 
-백엔드 MVP 개발 범위입니다. 구현 완료 내역이 아닙니다.
+백엔드 MVP 개발 범위입니다. 구현 완료 내역이 아닙니다. 구체적인 연동·정책·기본값은 [팀 배포용 규격 v0.2](integration-contract-draft.md)를 따릅니다.
 
 ## 백엔드 3인 업무 분배
 
@@ -71,4 +71,4 @@ Redis (전달 방식 사전 합의)
 B · Auth / RBAC ──► A의 REST API, B의 DB CRUD, C의 WebSocket 인증·권한 검사
 ```
 
-백엔드 언어·프레임워크와 Redis 전달 방식은 아직 확정하지 않았습니다. 공통 규칙과 사전 합의 항목은 [협업 가이드](contributing.md)를 참고하세요.
+백엔드는 Java/Spring Boot, 내부 전달은 Redis Streams를 사용합니다. 공통 규칙과 사전 합의 항목은 [협업 가이드](contributing.md)를 참고하세요.
