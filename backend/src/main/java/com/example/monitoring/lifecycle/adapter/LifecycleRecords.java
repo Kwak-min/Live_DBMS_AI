@@ -1,7 +1,10 @@
 package com.example.monitoring.lifecycle.adapter;
 
+import com.example.monitoring.common.outbox.OutboxEventType;
+
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 record LockedTarget(long configVersion, boolean enabled, String name, boolean deleted) {
@@ -48,10 +51,10 @@ record IncidentResolution(
 ) {
 }
 
-record SerializedLifecycleEvent(
+record PreparedLifecycleEvent(
         UUID eventId,
-        String eventType,
-        Instant publishedAt,
-        String json
+        OutboxEventType eventType,
+        long databaseConfigId,
+        Map<String, Object> body
 ) {
 }

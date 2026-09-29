@@ -1,5 +1,7 @@
 package com.example.monitoring.lifecycle.adapter;
 
+import com.example.monitoring.common.outbox.OutboxEventRepository;
+import com.example.monitoring.common.outbox.OutboxWriter;
 import com.example.monitoring.lifecycle.port.MonitoringLifecyclePort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -22,17 +24,21 @@ class JdbcMonitoringLifecyclePortContextTest {
         DataSource dataSource = mock(DataSource.class);
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        OutboxWriter commonWriter = mock(OutboxWriter.class);
+        OutboxEventRepository outboxEvents = mock(OutboxEventRepository.class);
 
         new ApplicationContextRunner()
                 .withBean(JdbcTemplate.class, () -> jdbc)
                 .withBean(ObjectMapper.class, ObjectMapper::new)
                 .withBean(PlatformTransactionManager.class, () -> transactionManager)
+                .withBean(OutboxWriter.class, () -> commonWriter)
+                .withBean(OutboxEventRepository.class, () -> outboxEvents)
                 .withUserConfiguration(AdapterConfiguration.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(JdbcMonitoringLifecyclePort.class);
                     assertThat(context).hasSingleBean(MonitoringLifecyclePort.class);
-                    verifyNoInteractions(dataSource, transactionManager);
+                    verifyNoInteractions(dataSource, transactionManager, commonWriter, outboxEvents);
                 });
     }
 

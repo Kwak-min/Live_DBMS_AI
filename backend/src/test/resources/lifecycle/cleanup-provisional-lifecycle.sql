@@ -9,7 +9,8 @@ DROP TABLE IF EXISTS risk_rule_states CASCADE;
 DROP TABLE IF EXISTS incidents CASCADE;
 DROP TABLE IF EXISTS risk_policies CASCADE;
 DROP TABLE IF EXISTS monitoring_states CASCADE;
-DROP TABLE IF EXISTS event_outbox CASCADE;
+
+TRUNCATE TABLE event_outbox, processed_events;
 
 ALTER TABLE auth_sessions
     DROP CONSTRAINT IF EXISTS auth_sessions_sid_user_unique;

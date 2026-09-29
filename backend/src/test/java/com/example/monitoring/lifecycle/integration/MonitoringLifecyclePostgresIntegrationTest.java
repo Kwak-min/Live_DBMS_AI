@@ -1,5 +1,6 @@
 package com.example.monitoring.lifecycle.integration;
 
+import com.example.monitoring.common.config.UtcInstantJacksonConfig;
 import com.example.monitoring.domain.AuditAction;
 import com.example.monitoring.domain.AuditTargetType;
 import com.example.monitoring.domain.DatabaseConfig;
@@ -55,6 +56,9 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
         "app.collector.enabled=false",
+        "app.outbox.publisher-enabled=false",
+        "app.outbox.retention-cleanup-enabled=false",
+        "app.legacy.blocked-reasons-cleanup-enabled=false",
         "app.metrics.retention-cleanup-enabled=false",
         "app.part-b.retention-cleanup-enabled=false",
         "app.database-security.verify-on-startup=false",
@@ -138,7 +142,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
     private TransactionTemplate transactions;
 
     @BeforeEach
-    void resetToActiveV1V2() {
+    void resetToActiveV1V2V3() {
         transactions = new TransactionTemplate(transactionManager);
         executeScript(new ClassPathResource("lifecycle/cleanup-provisional-lifecycle.sql"));
         jdbc.update("DELETE FROM audit_logs");
@@ -155,13 +159,14 @@ class MonitoringLifecyclePostgresIntegrationTest {
     }
 
     @Test
-    void v1V2ApplicationStartsWithLifecycleBeanAndMissingV4InvocationRollsBackBAndAudit() {
+    void v1V2V3ApplicationStartsWithLifecycleBeanAndMissingV4InvocationRollsBackBAndAudit() {
         assertThat(applicationContext.getBean(MonitoringLifecyclePort.class)).isSameAs(lifecycle);
         assertThat(Arrays.stream(flyway.info().applied())
                 .map(info -> info.getVersion().getVersion()))
-                .containsExactly("1", "2");
+                .containsExactly("1", "2", "3");
         assertThat(tableExists("monitoring_states")).isFalse();
-        assertThat(tableExists("event_outbox")).isFalse();
+        assertThat(tableExists("event_outbox")).isTrue();
+        assertThat(tableExists("processed_events")).isTrue();
         assertThat(hasConstraint("auth_sessions", "auth_sessions_sid_user_unique")).isFalse();
 
         AtomicReference<Throwable> lifecycleFailure = new AtomicReference<>();
@@ -180,14 +185,14 @@ class MonitoringLifecyclePostgresIntegrationTest {
         assertThat(commitFailure).isInstanceOf(UnexpectedRollbackException.class);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM database_configs", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Long.class)).isZero();
-        proof("missing-v4", "migrations=1,2", "targetRows=0", "auditRows=0", "rollbackOnly=true");
+        proof("missing-v4", "migrations=1,2,3", "targetRows=0", "auditRows=0", "rollbackOnly=true");
     }
 
     @Test
-    void provisionalPrerequisitesAndCreatedTargetsHaveExactDefaultsAndPayloads() throws Exception {
+    void actualV3PrerequisitesAndCreatedTargetsHaveExactDefaultsAndPayloads() throws Exception {
         assertThat(hasConstraint("auth_sessions", "auth_sessions_sid_user_unique")).isFalse();
         installProvisionalLifecycleSchema();
-        assertProvisionalPrerequisites();
+        assertActualPrerequisites();
 
         long enabledId = createWithLifecycle("enabled-target", true, at(0));
         long disabledId = createWithLifecycle("disabled-target", false, at(1));
@@ -204,8 +209,8 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 "NO_DATA", normalized(at(0)));
         assertStatusPayload(rows.get(1).payload(), disabledId, 1L, 1L, false, false,
                 "PAUSED", normalized(at(1)));
-        assertOutboxEnvelope(rows.get(0), normalized(at(0)));
-        assertOutboxEnvelope(rows.get(1), normalized(at(1)));
+        assertOutboxEnvelope(rows.get(0), enabledId, normalized(at(0)));
+        assertOutboxEnvelope(rows.get(1), disabledId, normalized(at(1)));
         proof("created-defaults", "targets=2", "states=2", "policies=2", "outbox=2");
     }
 
@@ -270,7 +275,10 @@ class MonitoringLifecyclePostgresIntegrationTest {
         assertAllPendingCancelled(7);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM event_outbox", Long.class)).isEqualTo(12L);
         outboxRows().forEach(row -> assertOutboxEnvelope(
-                row, Instant.parse(row.payload().path("publishedAt").asText())));
+                row,
+                targetId,
+                Instant.parse(row.payload().path(row.eventType().equals("IncidentResolvedEvent")
+                        ? "resolvedAt" : "updatedAt").asText())));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Long.class)).isEqualTo(5L);
         assertDeletedTarget(targetId);
         assertLedgerOrder(updatedIncidents, pausedIncidents, resumedIncidents, deletedIncidents);
@@ -344,7 +352,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 "SLOW_QUERY_RATE", "SLOW_QUERIES_HIGH", payloadMetric, 1L, at(6), "가".repeat(22_000)));
         seedIncidentsAndPendingDeliveries(oversized);
         assertRejectedMutation(payloadOverflowId, 2L, true, "payload-overflow-v2", false,
-                TargetChangeType.UPDATED, 2L, true, "payload-overflow-v2", "payload exceeds 65536 bytes");
+                TargetChangeType.UPDATED, 2L, true, "payload-overflow-v2", "exceeds 64KiB");
 
         assertRejectedWithoutRowChanges(() -> transactions.executeWithoutResult(ignored -> lifecycle.applyChange(
                 new TargetChange(MAX_SAFE_INTEGER + 1L, 1L, TargetChangeType.CREATED, true,
@@ -470,7 +478,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 """);
     }
 
-    private void assertProvisionalPrerequisites() {
+    private void assertActualPrerequisites() {
         assertThat(hasConstraint("auth_sessions", "auth_sessions_sid_user_unique")).isTrue();
         assertThat(hasConstraint("metric_data", "metric_data_id_target_unique")).isTrue();
         List<Map<String, Object>> columns = jdbc.queryForList("""
@@ -480,11 +488,12 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 ORDER BY ordinal_position
                 """);
         assertThat(columns).extracting(row -> row.get("column_name")).containsExactly(
-                "event_id", "event_type", "payload", "created_at", "published_at", "attempts", "next_attempt_at");
-        assertThat(columns.get(2).get("udt_name")).isEqualTo("jsonb");
-        assertThat(columns.get(3).get("udt_name")).isEqualTo("timestamptz");
-        assertThat(columns.get(4).get("udt_name")).isEqualTo("timestamptz");
+                "event_id", "seq", "event_type", "stream_key", "ordering_key", "payload",
+                "created_at", "published_at", "attempts", "next_attempt_at", "last_error");
+        assertThat(columns.get(5).get("udt_name")).isEqualTo("jsonb");
         assertThat(columns.get(6).get("udt_name")).isEqualTo("timestamptz");
+        assertThat(columns.get(7).get("udt_name")).isEqualTo("timestamptz");
+        assertThat(columns.get(9).get("udt_name")).isEqualTo("timestamptz");
     }
 
     private long createWithLifecycle(String name, boolean enabled, Instant occurredAt) {
@@ -587,10 +596,17 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     private long primeObservedState(long targetId, Instant observedAt) {
         Long metricId = jdbc.queryForObject("""
-                INSERT INTO metric_data (collection_status, created_at, database_config_id, timestamp)
-                VALUES ('SUCCESS', ?, ?, ?)
+                INSERT INTO metric_data (
+                    collection_status, created_at, database_config_id, timestamp,
+                    config_version, collection_attempt_time, last_success_at
+                )
+                SELECT 'SUCCESS', ?, ?, ?, config_version, ?, ?
+                FROM monitoring_states
+                WHERE database_config_id = ?
                 RETURNING id
-                """, Long.class, Timestamp.from(normalized(observedAt)), targetId, Timestamp.from(normalized(observedAt)));
+                """, Long.class,
+                Timestamp.from(normalized(observedAt)), targetId, Timestamp.from(normalized(observedAt)),
+                Timestamp.from(normalized(observedAt)), Timestamp.from(normalized(observedAt)), targetId);
         jdbc.update("""
                 UPDATE monitoring_states
                 SET connection_status = 'UP', data_freshness = 'FRESH', risk_level = 'FATAL',
@@ -770,6 +786,10 @@ class MonitoringLifecyclePostgresIntegrationTest {
     ) {
         List<LedgerRow> rows = ledgerRows();
         assertThat(rows).hasSize(12);
+        List<OutboxRow> outbox = outboxRows();
+        assertThat(outbox).extracting(OutboxRow::eventId)
+                .containsExactlyElementsOf(rows.stream().map(LedgerRow::eventId).toList());
+        assertThat(outbox).extracting(OutboxRow::seq).isSorted().doesNotHaveDuplicates();
         assertThat(rows.get(0).eventType()).isEqualTo("MonitoringStatusChangedEvent");
         int index = 1;
         for (List<IncidentSeed> segment : List.of(updated, paused, resumed, deleted)) {
@@ -796,7 +816,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 "metricValue", "thresholdValue", "sourceMetricId", "message", "incidentVersion");
         assertThat(payload.path("schemaVersion").asInt()).isOne();
         assertThat(payload.path("eventType").asText()).isEqualTo("IncidentResolvedEvent");
-        assertThat(payload.path("publishedAt").asText()).isEqualTo(time(resolvedAt));
         assertThat(payload.path("timestamp").asText()).isEqualTo(time(resolvedAt));
         assertThat(payload.path("sourceEventId").isNull()).isTrue();
         assertThat(payload.path("databaseName").asText()).isEqualTo(incident.databaseName());
@@ -838,7 +857,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 "lastSuccessAt", "latestMetricId", "openIncidentIds", "stateVersion", "updatedAt");
         assertThat(payload.path("schemaVersion").asInt()).isOne();
         assertThat(payload.path("eventType").asText()).isEqualTo("MonitoringStatusChangedEvent");
-        assertThat(payload.path("publishedAt").asText()).isEqualTo(time(occurredAt));
         assertThat(payload.path("databaseConfigId").asLong()).isEqualTo(targetId);
         assertThat(payload.path("configVersion").asLong()).isEqualTo(configVersion);
         assertThat(payload.path("stateVersion").asLong()).isEqualTo(stateVersion);
@@ -856,14 +874,26 @@ class MonitoringLifecyclePostgresIntegrationTest {
         assertThat(payload.has("requestId")).isFalse();
     }
 
-    private void assertOutboxEnvelope(OutboxRow row, Instant publishedAt) {
+    private void assertOutboxEnvelope(OutboxRow row, long targetId, Instant occurredAt) {
+        String expectedStream = switch (row.eventType()) {
+            case "MonitoringStatusChangedEvent" -> "stream:statuses";
+            case "IncidentResolvedEvent" -> "stream:incidents";
+            default -> throw new IllegalArgumentException(row.eventType());
+        };
+        assertThat(row.seq()).isPositive();
+        assertThat(row.streamKey()).isEqualTo(expectedStream);
+        assertThat(row.orderingKey()).isEqualTo("database:" + targetId);
+        assertThat(row.payload().path("schemaVersion").asInt()).isOne();
         assertThat(row.payload().path("eventId").asText()).isEqualTo(row.eventId().toString());
         assertThat(row.payload().path("eventType").asText()).isEqualTo(row.eventType());
-        assertThat(row.createdAt()).isEqualTo(publishedAt);
+        assertThat(row.createdAt()).isNotEqualTo(occurredAt);
         assertThat(row.publishedAt()).isNull();
         assertThat(row.attempts()).isZero();
-        assertThat(row.nextAttemptAt()).isEqualTo(publishedAt);
-        assertThat(row.payload().path("publishedAt").asText()).isEqualTo(time(publishedAt));
+        assertThat(row.nextAttemptAt()).isEqualTo(row.createdAt());
+        assertThat(row.lastError()).isNull();
+        assertThat(row.payload().path("publishedAt").asText()).isEqualTo(time(row.createdAt()));
+        String occurrenceField = row.eventType().equals("IncidentResolvedEvent") ? "resolvedAt" : "updatedAt";
+        assertThat(row.payload().path(occurrenceField).asText()).isEqualTo(time(occurredAt));
     }
 
     private void assertDeletedTarget(long targetId) {
@@ -918,17 +948,21 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     private List<OutboxRow> outboxRows() {
         return jdbc.query("""
-                SELECT event_id, event_type, payload::text AS payload, created_at,
-                       published_at, attempts, next_attempt_at
-                FROM event_outbox ORDER BY created_at, event_id
+                SELECT event_id, seq, event_type, stream_key, ordering_key, payload::text AS payload,
+                       created_at, published_at, attempts, next_attempt_at, last_error
+                FROM event_outbox ORDER BY seq
                 """, (row, ignored) -> new OutboxRow(
                 row.getObject("event_id", UUID.class),
+                row.getLong("seq"),
                 row.getString("event_type"),
+                row.getString("stream_key"),
+                row.getString("ordering_key"),
                 readJson(row.getString("payload")),
                 row.getTimestamp("created_at").toInstant(),
                 row.getTimestamp("published_at") == null ? null : row.getTimestamp("published_at").toInstant(),
                 row.getInt("attempts"),
-                row.getTimestamp("next_attempt_at").toInstant()));
+                row.getTimestamp("next_attempt_at").toInstant(),
+                row.getString("last_error")));
     }
 
     private List<LedgerRow> ledgerRows() {
@@ -990,7 +1024,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
     }
 
     private String time(Instant value) {
-        return normalized(value).toString();
+        return UtcInstantJacksonConfig.format(normalized(value));
     }
 
     private UUID requestId(long version) {
@@ -1049,12 +1083,16 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     private record OutboxRow(
             UUID eventId,
+            long seq,
             String eventType,
+            String streamKey,
+            String orderingKey,
             JsonNode payload,
             Instant createdAt,
             Instant publishedAt,
             int attempts,
-            Instant nextAttemptAt
+            Instant nextAttemptAt,
+            String lastError
     ) {
     }
 

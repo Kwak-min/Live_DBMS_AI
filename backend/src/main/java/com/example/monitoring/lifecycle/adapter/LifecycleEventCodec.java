@@ -1,15 +1,16 @@
 package com.example.monitoring.lifecycle.adapter;
 
+import com.example.monitoring.common.config.UtcInstantJacksonConfig;
+import com.example.monitoring.common.outbox.EventJson;
+import com.example.monitoring.common.outbox.OutboxEventType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,11 +18,6 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 final class LifecycleEventCodec {
-
-    static final int MAX_PAYLOAD_BYTES = 65_536;
-    private static final DateTimeFormatter UTC_MILLIS = new DateTimeFormatterBuilder()
-            .appendInstant(3)
-            .toFormatter();
 
     private final ObjectMapper objectMapper;
     private final Supplier<UUID> eventIds;
@@ -44,9 +40,9 @@ final class LifecycleEventCodec {
         return writeJson(rules);
     }
 
-    SerializedLifecycleEvent statusChanged(MonitoringStateWrite state) {
+    PreparedLifecycleEvent statusChanged(MonitoringStateWrite state) {
         UUID eventId = eventIds.get();
-        Map<String, Object> payload = common(eventId, "MonitoringStatusChangedEvent", state.updatedAt());
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("databaseConfigId", state.databaseConfigId());
         payload.put("configVersion", state.configVersion());
         payload.put("deleted", state.deleted());
@@ -60,13 +56,13 @@ final class LifecycleEventCodec {
         payload.put("openIncidentIds", List.of());
         payload.put("stateVersion", state.stateVersion());
         payload.put("updatedAt", time(state.updatedAt()));
-        return event(eventId, "MonitoringStatusChangedEvent", state.updatedAt(), payload);
+        return event(eventId, OutboxEventType.MONITORING_STATUS_CHANGED, state.databaseConfigId(), payload);
     }
 
-    SerializedLifecycleEvent incidentResolved(IncidentResolution resolution) {
+    PreparedLifecycleEvent incidentResolved(IncidentResolution resolution) {
         UUID eventId = eventIds.get();
         LockedIncident incident = resolution.incident();
-        Map<String, Object> payload = common(eventId, "IncidentResolvedEvent", resolution.resolvedAt());
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("timestamp", time(resolution.resolvedAt()));
         payload.put("sourceEventId", null);
         payload.put("incidentId", incident.incidentId());
@@ -86,31 +82,21 @@ final class LifecycleEventCodec {
         payload.put("sourceMetricId", incident.sourceMetricId());
         payload.put("message", incident.message());
         payload.put("incidentVersion", resolution.nextIncidentVersion());
-        return event(eventId, "IncidentResolvedEvent", resolution.resolvedAt(), payload);
+        return event(eventId, OutboxEventType.INCIDENT_RESOLVED, incident.databaseConfigId(), payload);
     }
 
-    private SerializedLifecycleEvent event(
+    private PreparedLifecycleEvent event(
             UUID eventId,
-            String eventType,
-            Instant publishedAt,
+            OutboxEventType eventType,
+            long databaseConfigId,
             Map<String, Object> payload
     ) {
-        Instant normalizedPublishedAt = publishedAt.truncatedTo(ChronoUnit.MILLIS);
-        byte[] bytes = writeBytes(payload);
-        if (bytes.length > MAX_PAYLOAD_BYTES) {
-            throw new IllegalStateException("Monitoring lifecycle payload exceeds 65536 bytes");
-        }
-        return new SerializedLifecycleEvent(
-                eventId, eventType, normalizedPublishedAt, new String(bytes, StandardCharsets.UTF_8));
-    }
-
-    private Map<String, Object> common(UUID eventId, String eventType, Instant publishedAt) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("schemaVersion", 1);
-        payload.put("eventId", eventId);
-        payload.put("eventType", eventType);
-        payload.put("publishedAt", time(publishedAt));
-        return payload;
+        EventJson.build(objectMapper, eventId, eventType.wireName(), Instant.EPOCH, payload);
+        return new PreparedLifecycleEvent(
+                eventId,
+                eventType,
+                databaseConfigId,
+                Collections.unmodifiableMap(new LinkedHashMap<>(payload)));
     }
 
     private Map<String, Object> rule(
@@ -134,7 +120,7 @@ final class LifecycleEventCodec {
     }
 
     private String time(Instant instant) {
-        return UTC_MILLIS.format(instant);
+        return UtcInstantJacksonConfig.format(instant);
     }
 
     private String writeJson(Object value) {

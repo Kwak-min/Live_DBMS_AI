@@ -1,33 +1,26 @@
 package com.example.monitoring.lifecycle.adapter;
 
-import org.springframework.jdbc.core.JdbcOperations;
-
-import java.sql.Timestamp;
+import com.example.monitoring.common.outbox.OutboxEventRepository;
+import com.example.monitoring.common.outbox.OutboxWriter;
 
 final class LifecycleOutboxWriter {
 
-    static final String INSERT_OUTBOX = """
-            INSERT INTO event_outbox (
-                event_id, event_type, payload, created_at, published_at, attempts, next_attempt_at
-            ) VALUES (?, ?, CAST(? AS jsonb), ?, NULL, 0, ?)
-            """;
+    private static final String DATABASE_ORDERING_KEY_PREFIX = "database:";
 
-    private final JdbcOperations jdbc;
+    private final OutboxWriter outboxWriter;
+    private final OutboxEventRepository outboxEvents;
 
-    LifecycleOutboxWriter(JdbcOperations jdbc) {
-        this.jdbc = jdbc;
+    LifecycleOutboxWriter(OutboxWriter outboxWriter, OutboxEventRepository outboxEvents) {
+        this.outboxWriter = outboxWriter;
+        this.outboxEvents = outboxEvents;
     }
 
-    void append(SerializedLifecycleEvent event) {
-        int inserted = jdbc.update(
-                INSERT_OUTBOX,
+    void append(PreparedLifecycleEvent event) {
+        outboxWriter.append(
                 event.eventId(),
                 event.eventType(),
-                event.json(),
-                Timestamp.from(event.publishedAt()),
-                Timestamp.from(event.publishedAt()));
-        if (inserted != 1) {
-            throw new IllegalStateException("Monitoring lifecycle failed to append outbox event");
-        }
+                DATABASE_ORDERING_KEY_PREFIX + event.databaseConfigId(),
+                event.body());
+        outboxEvents.flush();
     }
 }

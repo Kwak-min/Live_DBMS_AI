@@ -1,5 +1,8 @@
 package com.example.monitoring.lifecycle.adapter;
 
+import com.example.monitoring.common.outbox.OutboxEventRepository;
+import com.example.monitoring.common.outbox.OutboxEventType;
+import com.example.monitoring.common.outbox.OutboxWriter;
 import com.example.monitoring.lifecycle.port.TargetChange;
 import com.example.monitoring.lifecycle.port.TargetChangeType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -64,10 +68,13 @@ class JdbcMonitoringLifecyclePortTest {
     void constructorPerformsNoJdbcOrTransactionManagerWork() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        OutboxWriter commonWriter = mock(OutboxWriter.class);
+        OutboxEventRepository outboxEvents = mock(OutboxEventRepository.class);
 
-        new JdbcMonitoringLifecyclePort(jdbc, new ObjectMapper(), transactionManager);
+        new JdbcMonitoringLifecyclePort(
+                jdbc, new ObjectMapper(), transactionManager, commonWriter, outboxEvents);
 
-        verifyNoInteractions(jdbc, transactionManager);
+        verifyNoInteractions(jdbc, transactionManager, commonWriter, outboxEvents);
     }
 
     @Test
@@ -112,7 +119,7 @@ class JdbcMonitoringLifecyclePortTest {
     void createWritesExactInitialStateAndDefaultPolicy(boolean enabled, String freshness, Instant activationAt) {
         bindTransaction(false);
         TargetChange change = change(TargetChangeType.CREATED, 1L, enabled);
-        SerializedLifecycleEvent statusEvent = event("MonitoringStatusChangedEvent", 1);
+        PreparedLifecycleEvent statusEvent = event(OutboxEventType.MONITORING_STATUS_CHANGED, 1);
         when(store.lockTarget(TARGET_ID)).thenReturn(Optional.of(target(change)));
         when(store.lockState(TARGET_ID)).thenReturn(Optional.empty());
         when(events.defaultPolicyJson()).thenReturn("[{\"ruleId\":\"CONNECTION_RATIO\"}]");
@@ -150,8 +157,8 @@ class JdbcMonitoringLifecyclePortTest {
         TargetChange change = change(testCase.type(), 3L, testCase.resultEnabled());
         LockedMonitoringState current = new LockedMonitoringState(2L, 7L, testCase.currentEnabled(), false);
         LockedIncident incident = incident("CONNECTION_FAILURE", 4L);
-        SerializedLifecycleEvent incidentEvent = event("IncidentResolvedEvent", 2);
-        SerializedLifecycleEvent statusEvent = event("MonitoringStatusChangedEvent", 3);
+        PreparedLifecycleEvent incidentEvent = event(OutboxEventType.INCIDENT_RESOLVED, 2);
+        PreparedLifecycleEvent statusEvent = event(OutboxEventType.MONITORING_STATUS_CHANGED, 3);
         when(store.lockTarget(TARGET_ID)).thenReturn(Optional.of(target(change)));
         when(store.lockState(TARGET_ID)).thenReturn(Optional.of(current));
         when(store.lockOpenIncidents(TARGET_ID)).thenReturn(List.of(incident));
@@ -206,10 +213,10 @@ class JdbcMonitoringLifecyclePortTest {
         when(store.lockState(TARGET_ID)).thenReturn(Optional.of(current));
         when(store.lockOpenIncidents(TARGET_ID)).thenReturn(incidents);
         when(events.incidentResolved(any(IncidentResolution.class)))
-                .thenAnswer(invocation -> event("IncidentResolvedEvent",
+                .thenAnswer(invocation -> event(OutboxEventType.INCIDENT_RESOLVED,
                         ((IncidentResolution) invocation.getArgument(0)).nextIncidentVersion()));
         when(events.statusChanged(any(MonitoringStateWrite.class)))
-                .thenReturn(event("MonitoringStatusChangedEvent", 99));
+                .thenReturn(event(OutboxEventType.MONITORING_STATUS_CHANGED, 99));
 
         port.applyChange(change);
 
@@ -270,11 +277,11 @@ class JdbcMonitoringLifecyclePortTest {
                 new LockedMonitoringState(2L, 2L, true, false)));
         when(store.lockOpenIncidents(TARGET_ID)).thenReturn(List.of(incident));
         when(events.incidentResolved(any())).thenThrow(
-                new IllegalStateException("Monitoring lifecycle payload exceeds 65536 bytes"));
+                new IllegalArgumentException("Event payload exceeds 64KiB: IncidentResolvedEvent"));
 
         assertThatThrownBy(() -> port.applyChange(change))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Monitoring lifecycle payload exceeds 65536 bytes");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Event payload exceeds 64KiB: IncidentResolvedEvent");
 
         verify(store, never()).updateState(any(), any());
         verify(store, never()).resolveIncident(any());
@@ -325,9 +332,9 @@ class JdbcMonitoringLifecyclePortTest {
                 incidentVersion);
     }
 
-    private SerializedLifecycleEvent event(String type, long suffix) {
-        return new SerializedLifecycleEvent(
-                new UUID(0L, suffix), type, NORMALIZED_AT, "{\"eventType\":\"" + type + "\"}");
+    private PreparedLifecycleEvent event(OutboxEventType type, long suffix) {
+        return new PreparedLifecycleEvent(
+                new UUID(0L, suffix), type, TARGET_ID, Map.of("databaseConfigId", TARGET_ID));
     }
 
     private static Stream<org.junit.jupiter.params.provider.Arguments> createStates() {

@@ -1,5 +1,7 @@
 package com.example.monitoring.lifecycle.adapter;
 
+import com.example.monitoring.common.outbox.OutboxEventRepository;
+import com.example.monitoring.common.outbox.OutboxWriter;
 import com.example.monitoring.lifecycle.port.MonitoringLifecyclePort;
 import com.example.monitoring.lifecycle.port.TargetChange;
 import com.example.monitoring.lifecycle.port.TargetChangeType;
@@ -35,12 +37,14 @@ public final class JdbcMonitoringLifecyclePort implements MonitoringLifecyclePor
     public JdbcMonitoringLifecyclePort(
             JdbcTemplate jdbc,
             ObjectMapper objectMapper,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            OutboxWriter outboxWriter,
+            OutboxEventRepository outboxEvents
     ) {
         this(
                 new LifecycleJdbcStore(jdbc),
                 new LifecycleEventCodec(objectMapper),
-                new LifecycleOutboxWriter(jdbc),
+                new LifecycleOutboxWriter(outboxWriter, outboxEvents),
                 mandatoryTransaction(transactionManager));
     }
 
@@ -97,7 +101,7 @@ public final class JdbcMonitoringLifecyclePort implements MonitoringLifecyclePor
                 change, 1L, false, change.enabled() ? "NO_DATA" : "PAUSED",
                 change.enabled() ? occurredAt : null, occurredAt);
         String policyJson = events.defaultPolicyJson();
-        SerializedLifecycleEvent statusEvent = events.statusChanged(next);
+        PreparedLifecycleEvent statusEvent = events.statusChanged(next);
 
         store.insertState(next);
         store.insertDefaultPolicy(change.databaseConfigId(), policyJson, occurredAt);
@@ -110,7 +114,7 @@ public final class JdbcMonitoringLifecyclePort implements MonitoringLifecyclePor
         long nextStateVersion = increment("stateVersion", current.stateVersion());
         String reason = resolutionReason(change.changeType());
         List<IncidentResolution> resolutions = new ArrayList<>(incidents.size());
-        List<SerializedLifecycleEvent> incidentEvents = new ArrayList<>(incidents.size());
+        List<PreparedLifecycleEvent> incidentEvents = new ArrayList<>(incidents.size());
 
         for (LockedIncident incident : incidents) {
             if (occurredAt.isBefore(incident.lastObservedAt())) {
@@ -133,7 +137,7 @@ public final class JdbcMonitoringLifecyclePort implements MonitoringLifecyclePor
                 change.enabled() ? "NO_DATA" : "PAUSED",
                 activates ? occurredAt : null,
                 occurredAt);
-        SerializedLifecycleEvent statusEvent = events.statusChanged(next);
+        PreparedLifecycleEvent statusEvent = events.statusChanged(next);
 
         store.updateState(next, current);
         store.deleteRuleStates(change.databaseConfigId());

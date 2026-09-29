@@ -1,5 +1,7 @@
 package com.example.monitoring.lifecycle.adapter;
 
+import com.example.monitoring.common.outbox.EventJson;
+import com.example.monitoring.common.outbox.OutboxEventType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -66,19 +68,21 @@ class LifecycleEventCodecTest {
                 null,
                 Instant.parse("2026-09-29T03:04:05.123456789Z"));
 
-        SerializedLifecycleEvent event = codec.statusChanged(state);
-        JsonNode payload = objectMapper.readTree(event.json());
+        PreparedLifecycleEvent event = codec.statusChanged(state);
+        JsonNode payload = objectMapper.valueToTree(event.body());
+        JsonNode envelope = objectMapper.readTree(EventJson.build(
+                objectMapper,
+                event.eventId(),
+                event.eventType().wireName(),
+                Instant.parse("2026-09-29T09:10:11.456789Z"),
+                event.body()));
 
-        assertThat(event.eventType()).isEqualTo("MonitoringStatusChangedEvent");
-        assertThat(event.publishedAt()).isEqualTo(Instant.parse("2026-09-29T03:04:05.123Z"));
+        assertThat(event.eventType()).isEqualTo(OutboxEventType.MONITORING_STATUS_CHANGED);
+        assertThat(event.databaseConfigId()).isEqualTo(12L);
         assertThat(fieldNames(payload)).containsExactlyInAnyOrder(
-                "schemaVersion", "eventId", "eventType", "publishedAt",
                 "databaseConfigId", "configVersion", "deleted", "enabled",
                 "connectionStatus", "dataFreshness", "riskLevel", "lastAttemptAt",
                 "lastSuccessAt", "latestMetricId", "openIncidentIds", "stateVersion", "updatedAt");
-        assertThat(payload.path("schemaVersion").asInt()).isOne();
-        assertThat(payload.path("eventId").asText()).isEqualTo(EVENT_ID.toString());
-        assertThat(payload.path("publishedAt").asText()).isEqualTo("2026-09-29T03:04:05.123Z");
         assertThat(payload.path("updatedAt").asText()).isEqualTo("2026-09-29T03:04:05.123Z");
         assertThat(payload.path("deleted").asBoolean()).isTrue();
         assertThat(payload.path("enabled").asBoolean()).isFalse();
@@ -92,6 +96,15 @@ class LifecycleEventCodecTest {
         assertThat(payload.path("openIncidentIds").isEmpty()).isTrue();
         assertThat(payload.has("actorId")).isFalse();
         assertThat(payload.has("requestId")).isFalse();
+        assertThat(payload.has("schemaVersion")).isFalse();
+        assertThat(payload.has("eventId")).isFalse();
+        assertThat(payload.has("eventType")).isFalse();
+        assertThat(payload.has("publishedAt")).isFalse();
+        assertThat(envelope.path("schemaVersion").asInt()).isOne();
+        assertThat(envelope.path("eventId").asText()).isEqualTo(EVENT_ID.toString());
+        assertThat(envelope.path("eventType").asText()).isEqualTo("MonitoringStatusChangedEvent");
+        assertThat(envelope.path("publishedAt").asText()).isEqualTo("2026-09-29T09:10:11.456Z");
+        assertThat(envelope.path("updatedAt").asText()).isEqualTo("2026-09-29T03:04:05.123Z");
     }
 
     @Test
@@ -99,17 +112,17 @@ class LifecycleEventCodecTest {
         LockedIncident incident = incident("증거 메시지", 9L);
         Instant resolvedAt = Instant.parse("2026-09-29T04:05:06.987654321Z");
 
-        SerializedLifecycleEvent event = codec.incidentResolved(
+        PreparedLifecycleEvent event = codec.incidentResolved(
                 new IncidentResolution(incident, 10L, "CONFIG_CHANGED", resolvedAt));
-        JsonNode payload = objectMapper.readTree(event.json());
+        JsonNode payload = objectMapper.valueToTree(event.body());
 
         assertThat(fieldNames(payload)).containsExactlyInAnyOrder(
-                "schemaVersion", "eventId", "eventType", "publishedAt", "timestamp", "sourceEventId",
+                "timestamp", "sourceEventId",
                 "incidentId", "databaseConfigId", "databaseName", "ruleId", "ruleType", "severity",
                 "status", "openedAt", "lastObservedAt", "resolvedAt", "resolutionReason", "metricName",
                 "metricValue", "thresholdValue", "sourceMetricId", "message", "incidentVersion");
-        assertThat(payload.path("eventType").asText()).isEqualTo("IncidentResolvedEvent");
-        assertThat(payload.path("publishedAt").asText()).isEqualTo("2026-09-29T04:05:06.987Z");
+        assertThat(event.eventType()).isEqualTo(OutboxEventType.INCIDENT_RESOLVED);
+        assertThat(event.databaseConfigId()).isEqualTo(12L);
         assertThat(payload.path("timestamp").asText()).isEqualTo("2026-09-29T04:05:06.987Z");
         assertThat(payload.path("resolvedAt").asText()).isEqualTo("2026-09-29T04:05:06.987Z");
         assertThat(payload.path("sourceEventId").isNull()).isTrue();
@@ -123,6 +136,10 @@ class LifecycleEventCodecTest {
         assertThat(payload.path("resolutionReason").asText()).isEqualTo("CONFIG_CHANGED");
         assertThat(payload.has("actorId")).isFalse();
         assertThat(payload.has("requestId")).isFalse();
+        assertThat(payload.has("schemaVersion")).isFalse();
+        assertThat(payload.has("eventId")).isFalse();
+        assertThat(payload.has("eventType")).isFalse();
+        assertThat(payload.has("publishedAt")).isFalse();
     }
 
     @Test
@@ -130,17 +147,18 @@ class LifecycleEventCodecTest {
         LockedIncident emptyMessage = incident("", 1L);
         IncidentResolution baselineResolution = new IncidentResolution(
                 emptyMessage, 2L, "CONFIG_CHANGED", Instant.parse("2026-09-29T04:05:06Z"));
-        int baselineBytes = bytes(codec.incidentResolved(baselineResolution).json());
-        String exactMessage = "a".repeat(LifecycleEventCodec.MAX_PAYLOAD_BYTES - baselineBytes);
+        PreparedLifecycleEvent baseline = codec.incidentResolved(baselineResolution);
+        int baselineBytes = bytes(envelope(baseline));
+        String exactMessage = "a".repeat(EventJson.MAX_PAYLOAD_BYTES - baselineBytes);
 
-        SerializedLifecycleEvent exact = codec.incidentResolved(new IncidentResolution(
+        PreparedLifecycleEvent exact = codec.incidentResolved(new IncidentResolution(
                 incident(exactMessage, 1L), 2L, "CONFIG_CHANGED", baselineResolution.resolvedAt()));
 
-        assertThat(bytes(exact.json())).isEqualTo(LifecycleEventCodec.MAX_PAYLOAD_BYTES);
+        assertThat(bytes(envelope(exact))).isEqualTo(EventJson.MAX_PAYLOAD_BYTES);
         assertThatThrownBy(() -> codec.incidentResolved(new IncidentResolution(
                 incident(exactMessage + "가", 1L), 2L, "CONFIG_CHANGED", baselineResolution.resolvedAt())))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Monitoring lifecycle payload exceeds 65536 bytes");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Event payload exceeds 64KiB: IncidentResolvedEvent");
     }
 
     private LockedIncident incident(String message, long incidentVersion) {
@@ -169,5 +187,10 @@ class LifecycleEventCodecTest {
 
     private int bytes(String json) {
         return json.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private String envelope(PreparedLifecycleEvent event) {
+        return EventJson.build(
+                objectMapper, event.eventId(), event.eventType().wireName(), Instant.EPOCH, event.body());
     }
 }
