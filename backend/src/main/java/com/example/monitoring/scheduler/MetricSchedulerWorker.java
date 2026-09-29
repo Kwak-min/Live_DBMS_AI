@@ -1,140 +1,94 @@
 package com.example.monitoring.scheduler;
 
 import com.example.monitoring.collector.DbMetricsCollector;
-import com.example.monitoring.domain.CollectionStatus;
-import com.example.monitoring.domain.DatabaseConfig;
-import com.example.monitoring.domain.MetricData;
-import com.example.monitoring.domain.RiskSeverity;
-import com.example.monitoring.domain.TargetDbStatus;
-import com.example.monitoring.dto.IncidentCreatedEvent;
-import com.example.monitoring.dto.MetricCollectedEvent;
-import com.example.monitoring.infrastructure.redis.IncidentPublisher;
-import com.example.monitoring.infrastructure.redis.RedisStreamPublisher;
-import com.example.monitoring.repository.DatabaseConfigRepository;
-import com.example.monitoring.repository.MetricDataRepository;
-import com.example.monitoring.service.ProjectIsolationService;
-import com.example.monitoring.service.RiskAssessmentEngine;
 import com.example.monitoring.database.port.CollectorTarget;
 import com.example.monitoring.database.port.TargetProvider;
+import com.example.monitoring.domain.MetricData;
+import com.example.monitoring.metric.MetricCollectionRecorder;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
+/**
+ * 5초 주기 수집 스케줄러. 수집과 기록만 담당하며 위험도 판단·사건·차단은 하지 않는다(C 소유).
+ * 이전 수집이 아직 실행 중인 대상은 이번 tick을 건너뛰어 같은 대상을 동시에 두 번 수집하지 않는다.
+ * 대상끼리 서로 기다리지 않으므로 느린 대상이 다른 대상의 주기를 늦추지 않는다.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "app.collector.enabled", havingValue = "true", matchIfMissing = true)
 public class MetricSchedulerWorker {
 
-    private final DatabaseConfigRepository databaseConfigRepository;
     private final TargetProvider targetProvider;
-    private final MetricDataRepository metricDataRepository;
     private final DbMetricsCollector dbMetricsCollector;
-    private final RedisStreamPublisher redisStreamPublisher;
-    private final RiskAssessmentEngine riskAssessmentEngine;
-    private final IncidentPublisher incidentPublisher;
-    private final ProjectIsolationService projectIsolationService;
+    private final MetricCollectionRecorder metricCollectionRecorder;
 
     private final ExecutorService collectionExecutor = Executors.newFixedThreadPool(10);
+    private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     @Scheduled(fixedRateString = "${app.collector.fixed-rate-ms:5000}")
     public void executeCollectionCycle() {
-        List<CollectorTarget> targetDatabases = targetProvider.listEnabled();
-        if (targetDatabases.isEmpty()) {
-            log.trace("No active database configurations found for metric collection.");
+        List<CollectorTarget> targets;
+        try {
+            targets = targetProvider.listEnabled();
+        } catch (Exception e) {
+            log.error("Failed to load collection targets; skipping this cycle.", e);
             return;
         }
-
-        log.debug("Starting metric collection cycle for {} target database(s).", targetDatabases.size());
-
-        List<CompletableFuture<Void>> futures = targetDatabases.stream()
-                .map(target -> CompletableFuture.runAsync(() -> processSingleTarget(target), collectionExecutor))
-                .toList();
-
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-    }
-
-    private void processSingleTarget(CollectorTarget target) {
-        LocalDateTime attemptTime = LocalDateTime.now();
-        try {
-            DatabaseConfig config = databaseConfigRepository.findByIdAndDeletedAtIsNull(target.id()).orElse(null);
-            if (config == null || !config.getEnabled() || !config.getConfigVersion().equals(target.configVersion())) {
-                return;
-            }
-            // 1. 메트릭 수집
-            MetricData metricData = dbMetricsCollector.collectMetrics(config, target);
-
-            DatabaseConfig latest = databaseConfigRepository.findByIdAndDeletedAtIsNull(target.id()).orElse(null);
-            if (latest == null || !latest.getEnabled() || !latest.getConfigVersion().equals(target.configVersion())) {
-                log.info("Discarding collection result for stale configVersion. dbId={}, collectedVersion={}",
-                        target.id(), target.configVersion());
-                return;
-            }
-            config = latest;
-
-            // 2. DatabaseConfig 상태 업데이트
-            if (metricData.getCollectionStatus() == CollectionStatus.SUCCESS) {
-                config.setStatus(TargetDbStatus.UP);
-                config.setLastErrorMessage(null);
-            } else {
-                config.setStatus(TargetDbStatus.DOWN);
-                config.setLastErrorMessage(metricData.getErrorMessage());
-            }
-            config.setLastCheckedAt(attemptTime);
-            databaseConfigRepository.save(config);
-
-            // 3. 메트릭 스냅샷 저장 (PostgreSQL)
-            MetricData savedMetric = metricDataRepository.save(metricData);
-
-            // 4. MetricCollectedEvent 빌드
-            MetricCollectedEvent event = MetricCollectedEvent.builder()
-                    .databaseConfigId(config.getId())
-                    .databaseName(config.getName())
-                    .host(config.getHost())
-                    .port(config.getPort())
-                    .timestamp(savedMetric.getTimestamp())
-                    .collectionAttemptTime(attemptTime)
-                    .cpuUsage(savedMetric.getCpuUsage())
-                    .memoryUsage(savedMetric.getMemoryUsage())
-                    .activeConnections(savedMetric.getActiveConnections())
-                    .maxConnections(savedMetric.getMaxConnections())
-                    .qps(savedMetric.getQps())
-                    .slowQueries(savedMetric.getSlowQueries())
-                    .threadsRunning(savedMetric.getThreadsRunning())
-                    .storageBytes(savedMetric.getStorageBytes())
-                    .responseTimeMs(savedMetric.getResponseTimeMs())
-                    .collectionStatus(savedMetric.getCollectionStatus())
-                    .errorMessage(savedMetric.getErrorMessage())
-                    .build();
-
-            // 5. MetricCollectedEvent → Redis Streams 발행
-            redisStreamPublisher.publish(event);
-
-            // 6. 위험도 평가
-            List<IncidentCreatedEvent> incidents = riskAssessmentEngine.evaluateRisk(event);
-
-            // 7. 인시던트별 처리: Redis 발행 + FATAL 자동 차단
-            for (IncidentCreatedEvent incident : incidents) {
-                incidentPublisher.publish(incident);
-
-                if (incident.getSeverity() == RiskSeverity.FATAL) {
-                    log.warn("[Scheduler] FATAL incident detected for DB [id={}, name={}]. Triggering auto-block.",
-                            config.getId(), config.getName());
-                    projectIsolationService.autoBlockOnFatalIncident(incident);
-                }
-            }
-
-        } catch (Exception e) {
-            log.error("Unhandled exception during collection execution for dbId: {}", target.id(), e);
+        for (CollectorTarget target : targets) {
+            submit(target);
         }
     }
-}
 
+    void submit(CollectorTarget target) {
+        if (!inFlight.add(target.id())) {
+            log.debug("Previous collection still running; skipping tick. databaseConfigId={}", target.id());
+            return;
+        }
+        try {
+            collectionExecutor.execute(() -> {
+                try {
+                    collectAndRecord(target);
+                } finally {
+                    inFlight.remove(target.id());
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            inFlight.remove(target.id());
+            log.warn("Collection executor rejected target. databaseConfigId={}", target.id());
+        }
+    }
+
+    void collectAndRecord(CollectorTarget target) {
+        try {
+            MetricData metric = dbMetricsCollector.collectMetrics(target);
+            if (metricCollectionRecorder.record(target, metric).isEmpty()) {
+                log.info("Discarded collection result: target changed during collection. databaseConfigId={}, "
+                        + "collectedVersion={}", target.id(), target.configVersion());
+            }
+        } catch (Exception e) {
+            // PostgreSQL 장애 등으로 저장하지 못하면 이벤트도 발행하지 않는다.
+            log.error("Failed to collect or record metrics. databaseConfigId={}", target.id(), e);
+        }
+    }
+
+    boolean isInFlight(long databaseConfigId) {
+        return inFlight.contains(databaseConfigId);
+    }
+
+    @PreDestroy
+    void shutdown() {
+        collectionExecutor.shutdownNow();
+    }
+}

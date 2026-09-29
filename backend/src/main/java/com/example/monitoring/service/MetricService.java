@@ -7,7 +7,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,12 +19,12 @@ public class MetricService {
     private final MetricDataRepository metricDataRepository;
 
     public Optional<MetricResponseDto> getLatestMetric(Long databaseConfigId) {
-        return metricDataRepository.findFirstByDatabaseConfigIdOrderByTimestampDesc(databaseConfigId)
+        return metricDataRepository.findFirstByDatabaseConfigIdOrderByTimestampDescIdDesc(databaseConfigId)
                 .map(MetricResponseDto::fromEntity);
     }
 
-    public List<MetricResponseDto> getMetricHistory(Long databaseConfigId, LocalDateTime start, LocalDateTime end) {
-        return metricDataRepository.findByDatabaseConfigIdAndTimestampBetweenOrderByTimestampAsc(databaseConfigId, start, end)
+    public List<MetricResponseDto> getMetricHistory(Long databaseConfigId, Instant start, Instant end) {
+        return metricDataRepository.findByDatabaseConfigIdAndTimestampBetweenOrderByTimestampAscIdAsc(databaseConfigId, start, end)
                 .stream()
                 .map(MetricResponseDto::fromEntity)
                 .toList();
