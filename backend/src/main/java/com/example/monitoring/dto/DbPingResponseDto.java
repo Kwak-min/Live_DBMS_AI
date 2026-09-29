@@ -7,7 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Getter
 @Builder
@@ -23,7 +23,7 @@ public class DbPingResponseDto {
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Diagnostic duration in milliseconds")
     private Long responseTimeMs;
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Legacy local date-time; UTC conversion awaits A/B shared DTO migration")
-    private LocalDateTime timestamp;
+    private Instant timestamp;
     @Schema(nullable = true, description = "AUTH_FAILED, CONNECT_TIMEOUT, CONNECTION_REFUSED, QUERY_FAILED, or UNKNOWN")
     private String errorCode;
     @Schema(nullable = true, description = "Safe diagnostic message")

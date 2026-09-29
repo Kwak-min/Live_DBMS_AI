@@ -56,13 +56,16 @@ app:
     allowed-ports: '${TARGET_DB_ALLOWED_PORTS:3306}'
   redis:
     stream-key: stream:metrics
+    status-stream-key: stream:statuses
     incident-stream-key: stream:incidents
+    heartbeat-stream-key: stream:collector-heartbeats
   collector:
-    enabled: true
-    fixed-rate-ms: 5000
+    enabled: ${APP_COLLECTOR_ENABLED:true}
+    fixed-rate-ms: ${APP_COLLECTOR_FIXED_RATE_MS:5000}
+    heartbeat-interval-ms: 10000
     connection-timeout-seconds: 5
   metrics:
-    retention-days: 30
+    retention-days: ${APP_METRICS_RETENTION_DAYS:30}
     retention-cleanup-enabled: true
     retention-cleanup-cron: "0 0 3 * * *"
 

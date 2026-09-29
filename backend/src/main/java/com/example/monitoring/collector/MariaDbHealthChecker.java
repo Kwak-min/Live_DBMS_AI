@@ -13,7 +13,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Slf4j
 @Component
@@ -23,7 +24,7 @@ public class MariaDbHealthChecker {
 
     public DbPingResponseDto pingAndFetchVersion(CollectorTarget config) {
         long startTime = System.currentTimeMillis();
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         boolean connected = false;
 
         try (Connection conn = connectionFactory.open(config)) {
