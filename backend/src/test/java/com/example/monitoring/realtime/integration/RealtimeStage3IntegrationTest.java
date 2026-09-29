@@ -104,11 +104,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
         properties = {
                 "server.address=127.0.0.1",
                 "server.port=${STAGE3_APP_PORT:18093}",
-                "spring.sql.init.mode=always",
-                "spring.sql.init.schema-locations=classpath:realtime/processed-events.sql",
                 "app.collector.enabled=false",
                 "app.metrics.retention-cleanup-enabled=false",
                 "app.part-b.retention-cleanup-enabled=false",
+                "app.outbox.publisher-enabled=false",
+                "app.outbox.retention-cleanup-enabled=false",
                 "monitoring.realtime.enabled=true",
                 "monitoring.realtime.reclaim-min-idle=1ms",
                 "monitoring.realtime.reclaim-interval=100ms",
@@ -254,11 +254,11 @@ class RealtimeStage3IntegrationTest {
                 WHERE success = true AND version IS NOT NULL
                 ORDER BY installed_rank
                 """, String.class);
-        assertThat(versions).containsExactly("1", "2");
-        assertThat(versions).doesNotContain("3");
+        assertThat(versions).containsExactly("1", "2", "3");
+        assertThat(versions).doesNotContain("4");
 
         List<Map<String, Object>> columns = jdbc.queryForList("""
-                SELECT column_name, data_type, is_nullable
+                SELECT column_name, data_type, character_maximum_length, is_nullable
                 FROM information_schema.columns
                 WHERE table_schema = current_schema() AND table_name = 'processed_events'
                 ORDER BY ordinal_position
@@ -269,6 +269,8 @@ class RealtimeStage3IntegrationTest {
                 .containsExactly("character varying", "character varying", "uuid", "timestamp with time zone");
         assertThat(columns).extracting(row -> row.get("is_nullable"))
                 .containsOnly("NO");
+        assertThat(columns).extracting(row -> row.get("character_maximum_length"))
+                .containsExactly(128, 128, null, null);
         Integer primaryKeyColumns = jdbc.queryForObject("""
                 SELECT count(*)
                 FROM information_schema.key_column_usage usage
@@ -281,6 +283,16 @@ class RealtimeStage3IntegrationTest {
                   AND usage.column_name IN ('stream', 'consumer_group', 'event_id')
                 """, Integer.class);
         assertThat(primaryKeyColumns).isEqualTo(3);
+
+        List<String> outboxColumns = jdbc.queryForList("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'event_outbox'
+                ORDER BY ordinal_position
+                """, String.class);
+        assertThat(outboxColumns).containsExactly(
+                "event_id", "seq", "event_type", "stream_key", "ordering_key", "payload",
+                "created_at", "published_at", "attempts", "next_attempt_at", "last_error");
 
         assertThat(canonicalInput).isEqualTo(contractFixtures.path("metricCollectedEvent"));
         assertThat(canonicalOutput).isEqualTo(expectedMetricUpdated(canonicalInput));

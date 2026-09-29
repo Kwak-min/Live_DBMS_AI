@@ -58,13 +58,14 @@ class RealtimeMetricTransactionTest {
         jdbc.execute("DROP TABLE IF EXISTS processed_events");
         jdbc.execute("""
                 CREATE TABLE processed_events (
-                    stream varchar(100) NOT NULL,
-                    consumer_group varchar(100) NOT NULL,
+                    stream varchar(128) NOT NULL,
+                    consumer_group varchar(128) NOT NULL,
                     event_id uuid NOT NULL,
                     processed_at timestamptz NOT NULL,
                     PRIMARY KEY (stream, consumer_group, event_id)
                 )
                 """);
+        jdbc.execute("CREATE INDEX idx_processed_events_processed_at ON processed_events (processed_at)");
         broadcastPort = mock(MetricBroadcastPort.class);
         targetProvider = mock(TargetProvider.class);
         when(targetProvider.getMetadata(12L))
