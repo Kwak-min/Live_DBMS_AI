@@ -1,0 +1,3 @@
+app:
+  auth:
+    secure-cookies: ${AUTH_SECURE_COOKIES:false}

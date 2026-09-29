@@ -3,11 +3,17 @@ package com.example.monitoring.controller;
 import com.example.monitoring.domain.CollectionStatus;
 import com.example.monitoring.dto.MetricResponseDto;
 import com.example.monitoring.service.MetricService;
+import com.example.monitoring.auth.service.AuthService;
+import com.example.monitoring.auth.service.CsrfTokenService;
+import com.example.monitoring.auth.service.RequestOriginValidator;
+import com.example.monitoring.auth.web.ApiSecurityErrorWriter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -19,6 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(MetricController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class MetricControllerTest {
 
     @Autowired
@@ -26,6 +33,18 @@ class MetricControllerTest {
 
     @MockBean
     private MetricService metricService;
+
+    @MockBean
+    private StringRedisTemplate redisTemplate;
+
+    @MockBean
+    private AuthService authService;
+
+    @MockBean
+    private ApiSecurityErrorWriter apiSecurityErrorWriter;
+
+    @MockBean private CsrfTokenService csrfTokenService;
+    @MockBean private RequestOriginValidator requestOriginValidator;
 
     @Test
     @DisplayName("GET /api/v1/metrics/{dbId}/latest returns latest metric snapshot")
