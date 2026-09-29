@@ -6,19 +6,19 @@ services, notification workers, repositories, or APIs.
 
 ## Current candidate status
 
-This remains the Stage 2 foundation record. The compatibility branch contains
-the merged develop baseline and its active Flyway inventory is A V1 plus the
-B-owned V2 Java migration. Real A V3 and C V4 are not active in the
-application's classpath. The checked B V2 migration still does not expose the
-`UNIQUE (sid, user_id)` prerequisite required by the staged V4 composite foreign
-key. A V3, including `processed_events` and the production `event_outbox`, is
-still absent; the seven-column outbox shape in the staged fixture is disposable
-test data only. Staged V4 now persists nullable `activation_at` and enforces
-the enabled/nondeleted and disabled/deleted lifecycle rules around that value.
-Production V4 registration, upgrade verification, and activation backfill remain
-blocked until the A and B prerequisites are delivered and verified. See [the
-Stage 3 realtime handoff](part-c-realtime.md) for the current refs, commands,
-and verification boundaries.
+This remains the Stage 2 foundation record on the merged Actual A baseline. The
+active Flyway inventory is A V1, B V2, and A V3. V3 owns the production
+`event_outbox` and `processed_events` tables and migrates metric timestamps to
+`TIMESTAMPTZ`, represented by `Instant` in the A model. The checked B V2
+migration still does not expose `UNIQUE (sid, user_id)`, and V3 still does not
+expose `UNIQUE (id, database_config_id)` on `metric_data`; those two composite
+keys are the remaining prerequisites for staged V4. Staged V4 persists nullable
+`activation_at` and enforces the enabled/nondeleted and disabled/deleted
+lifecycle rules around that value. Production V4 registration, upgrade
+verification, and activation backfill remain blocked until both keys and the
+retained-target decisions are delivered and verified. See [the Stage 3 realtime
+handoff](part-c-realtime.md) for the current refs, commands, and verification
+boundaries.
 
 ## Ownership and prerequisites
 
@@ -26,8 +26,8 @@ and verification boundaries.
 | --- | --- | --- |
 | Accounts and sessions | B | `users(id)` and `auth_sessions(sid,user_id)`; V2 must expose `UNIQUE (sid,user_id)` for session-owner integrity |
 | Monitored targets | B | `database_configs(id)`; targets are soft-deleted and their IDs are not reused |
-| Metrics | A | `metric_data(id,database_config_id)`; V3 must expose `UNIQUE (id,database_config_id)` for target-scoped metric references |
-| Reliable events | A common | `event_outbox` and `processed_events`; C writes/reads them through the common interfaces and does not duplicate them. The staged fixture's seven-column outbox is provisional and test-only. |
+| Metrics | A | `metric_data(id,database_config_id)`; Actual A V3 supplies the table but still needs `UNIQUE (id,database_config_id)` for target-scoped metric references |
+| Reliable events | A common | Actual A V3 owns `event_outbox` and `processed_events`; C writes/reads them through the common interfaces and does not duplicate them. The lifecycle fixture adds only the missing composite keys and C schema. |
 | Status, risk, incidents, recipients, deliveries | C | The seven tables in the staged V4 |
 | Recipient encryption service and key ring | B security boundary | C persists only key version, 12-byte nonce, and ciphertext-with-tag returned by the shared encryption boundary |
 
@@ -78,17 +78,18 @@ identity/deduplication; they are not reversible endpoint storage.
 
 ## Activation and migration ownership
 
-V4 remains at `backend/schema/part-c/V4__part_c_monitoring.sql` until both V2 and V3
-are integrated. The A migration owner controls version registration and must move
-the unchanged file into Flyway's active migration directory only after checking the
-stable prerequisite keys, an empty V1-to-V4 apply, and a V3-to-V4 upgrade. The
-activation backfill must also be planned against the final V3 state before V4 is
-registered. Part C must not patch V2/V3 from this staged migration.
+V4 remains at `backend/schema/part-c/V4__part_c_monitoring.sql` until the two
+missing V2/V3 composite keys are integrated. The A migration owner controls
+version registration and must move the unchanged file into Flyway's active
+migration directory only after checking the stable prerequisite keys, an empty
+V1-to-V4 apply, and a V3-to-V4 upgrade. The activation backfill must also be
+planned against the Actual A V3 state before V4 is registered. Part C must not
+patch V2/V3 from this staged migration.
 
 The integrated application keeps the Stage 3 realtime beans disabled by default with
 `monitoring.realtime.enabled: ${REALTIME_ENABLED:false}`. Set `REALTIME_ENABLED=true`
-only after A's `processed_events` prerequisite exists; the consumer fails closed when
-that table is unavailable rather than creating a C-owned substitute.
+only after Actual A V3's `processed_events` table exists; the consumer fails closed
+when that table is unavailable rather than creating a C-owned substitute.
 
 The schema deliberately leaves event publication and consumption deduplication in
 A's `event_outbox` and `processed_events`. State/incident/delivery changes will join
@@ -143,15 +144,21 @@ equal roundtrip through the official Redis 7.4.11 binary on isolated loopback po
 6398: XRANGE returned one `payload` field, XDEL returned 1, the dedicated key was
 absent after cleanup, and the bounded harness stopped its server.
 
-## Verification record
+## Historical verification record
 
-The embedded PostgreSQL run uses the test-only fixture, captures the expected
-pre-V4 `42P01` failure, rejects V4 with `42830` when the B composite key is
-removed, then applies V4 and passes 21 scenarios. The probes cover exact table
-count, activation type and lifecycle coherence, the provisional seven-column
+The earlier embedded PostgreSQL run used a test-only fixture, captured the
+expected pre-V4 `42P01` failure, rejected V4 with `42830` when the B composite
+key was removed, then applied V4 and recorded 21 scenarios. Its probes covered
+exact table count, activation type and lifecycle coherence, a provisional
 outbox shape, separate severity clocks, OPEN uniqueness, resolution coherence,
-recipient encryption shape and session ownership, active endpoint uniqueness with
-tombstone reuse, delivery deduplication, enum/version/count/safe-ID checks, and
-metric-retention evidence. Each test removes the probe schema in its cleanup
-path, the embedded server closes in the suite teardown, and the cleanup SQL
-confirms that `part_c_probe` is gone.
+recipient encryption shape and session ownership, active endpoint uniqueness
+with tombstone reuse, delivery deduplication, enum/version/count/safe-ID checks,
+and metric-retention evidence. Each test removed the probe schema in its cleanup
+path, the embedded server closed in suite teardown, and cleanup SQL confirmed
+that `part_c_probe` was gone. This historical receipt is preserved for
+traceability; it is not current Actual-A green evidence. The schema-only fixture
+now mirrors the Actual A V3 11-column outbox and `processed_events` shape, while
+the current schema receipt separately verifies real Flyway V1/V2/V3 databases
+with only the missing composite keys and staged C schema. The lifecycle
+integration uses the real A tables and adds only those missing keys plus C
+schema.

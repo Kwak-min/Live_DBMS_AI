@@ -1,6 +1,6 @@
 # C lifecycle contract handoff
 
-This handoff describes the C lifecycle implementation that is available for a future integration. `JdbcMonitoringLifecyclePort` is a Spring component with JDBC persistence and transactional outbox behavior, but B CRUD is not wired to it. The implementation performs no startup schema access and remains inactive until the migration and retained-target gates below pass. The activation order is B V2, verified real A V3, C V4, explicit existing-target backfill/validation, and only then B caller wiring.
+This handoff describes the C lifecycle implementation that is available for a future integration on the merged Actual A V3 baseline. `JdbcMonitoringLifecyclePort` is a Spring component with JDBC persistence and transactional outbox behavior, but B CRUD is not wired to it. The implementation performs no startup schema access and remains inactive until the migration and retained-target gates below pass. The activation order is B V2, verified real A V3, C V4, explicit existing-target backfill/validation, and only then B caller wiring.
 
 ## Canonical surface
 
@@ -114,19 +114,23 @@ Incident-resolved outbox rows are appended after each incident close and cancell
 
 ## Transactional outbox contract
 
-The lifecycle adapter inserts into the seven-column `event_outbox` contract that the future A V3 production schema must provide and reconcile. C owns the insertion values and payload contract; it does not add or activate the production table in this branch. The test-only fixture exposes these seven columns so the staged V4 and integration tests can run in isolation:
+The lifecycle adapter uses A's common `OutboxWriter` and `OutboxEventType` against the Actual A V3 11-column `event_outbox`; C does not add, duplicate, or activate that production table. The adapter supplies a body-only JSON object, the `database:<id>` ordering key, and one append followed by an explicit flush for each event. The common writer chooses the status or incident stream, creates the envelope (`schemaVersion`, `eventId`, `eventType`, and UTC-millisecond `publishedAt`), enforces the 64 KiB UTF-8 limit, and persists the row in the caller transaction. C's `occurredAt` remains the lifecycle occurrence time in `updatedAt`, `timestamp`, and `resolvedAt` body fields; it is distinct from the writer's envelope creation time.
 
 | Column | Contract |
 | --- | --- |
 | `event_id` | UUID primary key and the payload `eventId`. |
-| `event_type` | `MonitoringStatusChangedEvent` or `IncidentResolvedEvent`. |
-| `payload` | UTF-8 JSONB envelope, at most 65,536 bytes. |
-| `created_at` | UTC millisecond timestamp equal to payload `publishedAt`. |
+| `seq` | A-owned `BIGSERIAL` creation sequence and unique publication-order cursor. |
+| `event_type` | `MonitoringStatusChangedEvent` or `IncidentResolvedEvent`, routed by `OutboxEventType`. |
+| `stream_key` | A-owned Redis stream selected from the event type (`statuses` or `incidents`). |
+| `ordering_key` | `database:<databaseConfigId>` for lifecycle events. |
+| `payload` | UTF-8 JSONB envelope built from the C body, at most 65,536 bytes. |
+| `created_at` | UTC millisecond writer creation time. |
 | `published_at` | NULL until a later publisher succeeds. |
 | `attempts` | Zero on insertion. |
-| `next_attempt_at` | UTC millisecond timestamp equal to `created_at`. |
+| `next_attempt_at` | UTC millisecond timestamp initialized to the writer creation time. |
+| `last_error` | Nullable A-owned publisher failure text. |
 
-Every payload includes `schemaVersion=1`, `eventId`, `eventType`, and a UTC-millisecond `publishedAt`. Status payloads include the target ID, config/state versions, enabled/deleted flags, `UNKNOWN` connection status, data freshness, null risk and metric fields, an empty OPEN-incident list after administrative closure, and `updatedAt`. Incident payloads retain the incident ID, target/name, rule and severity, opened/observed/resolved times, resolution reason, metric evidence, null `sourceEventId`, and the incremented incident version. Actor and request identifiers are not embedded in these payloads. JSON serialization uses UTF-8 and rejects payloads above the byte cap before an outbox insert.
+Every payload includes the common envelope fields above. Status payloads include the target ID, config/state versions, enabled/deleted flags, `UNKNOWN` connection status, data freshness, null risk and metric fields, an empty OPEN-incident list after administrative closure, and `updatedAt`. Incident payloads retain the incident ID, target/name, rule and severity, opened/observed/resolved times, resolution reason, metric evidence, null `sourceEventId`, and the incremented incident version. Actor and request identifiers are not embedded in these payloads. C inserts each incident-resolution row before the final status row in the same transaction; the A publisher's cross-stream delivery ordering remains an integration validation concern. JSON serialization uses UTF-8 and rejects payloads above the byte cap before an outbox insert.
 
 ## Validation and rollback boundary
 
@@ -139,15 +143,28 @@ The PostgreSQL integration proves both creation and existing-target rollback whe
 Production activation is blocked until the following sequence is completed:
 
 1. B V2 is present and its target/session prerequisites are verified. The current B V2 does not provide the required `UNIQUE (sid, user_id)` key.
-2. The real A V3 is applied and verified. The current branch does not contain A's production metric composite key, `event_outbox`, or `processed_events` prerequisites.
-3. C V4 is applied only after those prerequisites are present. The staged file is `backend/schema/part-c/V4__part_c_monitoring.sql`; active Flyway inventory remains V1 plus B V2, and C V4 is not registered as an active production migration in this handoff.
+2. The real A V3 is applied and verified. The current active inventory is V1, V2, and V3; V3 owns `event_outbox` and `processed_events` and converts metric times to `Instant`/`TIMESTAMPTZ`, but it still lacks `UNIQUE (id, database_config_id)` on `metric_data`.
+3. C V4 is applied only after those prerequisites are present. The staged file is `backend/schema/part-c/V4__part_c_monitoring.sql`; C V4 is not registered as an active production migration in this handoff.
 4. An integration owner inventories every retained B target and performs an explicit backfill and validation decision. For a target that can be initialized consistently, create its state/policy once with the resulting retained configuration version and an integration-owner activation time, idempotently. For a target whose history cannot be reconstructed safely, refuse activation and remediate it explicitly. Do not route an existing target with `configVersion>1` through the C `CREATED` action, because `CREATED` is version-1-only. Reject duplicates, gaps, deleted tombstones, and any target lacking exactly one state and one policy.
 5. Only after the inventory, backfill/refusal decisions, and one-state/one-policy validation succeed may B wire the caller sequence above.
 
-There is no C startup backfill, automatic activation flag, fallback schema creation, implicit omission, or production activation routine. The disposable fixture under `backend/schema/part-c/test-fixtures/V2_V3_prerequisites.sql` is test-only: it exposes the missing B composite key, the metric composite key, and a seven-column outbox so staged V4 and the integration tests can run in an isolated schema. It is not B V2, not A V3, and must not be treated as a production migration.
+There is no C startup backfill, automatic activation flag, fallback schema creation, implicit omission, or production activation routine. The lifecycle integration fixture uses Actual A V3's `event_outbox` and `processed_events`, adding only the missing B/A composite keys and the C schema. The schema-only fixture under `backend/schema/part-c/test-fixtures` is now a disposable mirror of the Actual A 11-column outbox and `processed_events` shape; the schema receipt verifies that mirror separately from real Flyway V1/V2/V3 databases. It is not B V2, not A V3, and must not be treated as a production migration.
 
-## Verification boundary
+## Current Actual-A core verification
 
-Task 4's PostgreSQL coverage is bound to commit `13e0f09e8eb6d8bd83b639ccffe15e681505fe0e` and covers six scenarios with six tests, zero failures, zero errors, and zero skips: V1/V2 startup with missing-V4 rollback; provisional prerequisites and enabled/disabled CREATE defaults; all five actions with policy preservation, resets, four rule closures, pending cancellation, and insertion order; invalid/version/type/target/post-delete guards; safe-integer and payload-overflow guards; and forced outbox rollback for both CREATE and an existing-target UPDATE. The receipt is `.omo/evidence/c-lifecycle-next/task-4-part-c-lifecycle-implementation.xml` in the ignored attempt directory; the teammate-facing selector is `com.example.monitoring.lifecycle.integration.MonitoringLifecyclePostgresIntegrationTest`.
+The current common-outbox implementation is verified by the focused receipt at
+`.omo/evidence/c-lifecycle-next/actual-a/core-lifecycle-reconciliation.md` for
+commit `3ae41db5b3a2e329119b36e2d17ad8714596c253`. Its five selected test
+classes executed 28 tests with 0 failures, 0 errors, and 0 skips, including six
+real-PostgreSQL lifecycle scenarios on V1/V2/V3. The receipt records actual
+status and incident stream routing, `database:<id>` ordering keys, common
+envelope timestamps, deterministic sequence/order assertions, all five actions,
+and caught CREATE/UPDATE rollback snapshots. This is focused core evidence;
+Normal, Redis, native, final source-manifest, B caller wiring, V4 activation,
+and retained-target backfill remain separate gates.
 
-The implementation and integration tests are evidence for the C boundary only. They do not prove B production CRUD wiring, real A V3 availability, production V4 activation, or a completed existing-target backfill. Those remain explicit integration-owner gates.
+## Historical verification boundary
+
+Task 4's pre-Actual-A PostgreSQL receipt is bound to commit `13e0f09e8eb6d8bd83b639ccffe15e681505fe0e` and records six scenarios with six tests, zero failures, zero errors, and zero skips: V1/V2 startup with missing-V4 rollback; provisional prerequisites and enabled/disabled CREATE defaults; all five actions with policy preservation, resets, four rule closures, pending cancellation, and insertion order; invalid/version/type/target/post-delete guards; safe-integer and payload-overflow guards; and forced outbox rollback for both CREATE and an existing-target UPDATE. The receipt is `.omo/evidence/c-lifecycle-next/task-4-part-c-lifecycle-implementation.xml` in the ignored attempt directory; the teammate-facing selector is `com.example.monitoring.lifecycle.integration.MonitoringLifecyclePostgresIntegrationTest`. This historical receipt is preserved for traceability and is not current Actual-A green evidence; current reconciliation tests must be recorded separately.
+
+The implementation and historical integration tests are evidence for the C boundary only. They do not prove B production CRUD wiring, production V4 activation, or a completed existing-target backfill. Those remain explicit integration-owner gates.

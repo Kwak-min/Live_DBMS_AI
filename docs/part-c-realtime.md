@@ -7,12 +7,11 @@ or deployment approval.
 
 ## Candidate and migration status
 
-The C candidate is based on `c897c87af11cede0eacf07ea142099fd1741f572` and
-contains a local merge of the Part B candidate
-`0934d31a637c14221e47c8d2973b0a66a95ea2fc`. The local merge commit is
-`8d2990e16eaa1e63f3c5e33e83620a268623448b`. Part B's pull request is still
-open and unmerged upstream; the local merge is only the isolated C candidate
-base. The upstream `develop` branch is not changed by this checkout.
+The C candidate is based on the merged Actual A V3 baseline at
+`d3308d10de8b1a439e93c8099c2901ee3c5dc40d` (A source
+`b7d54171b029566c9cf2995dbad61117dfdda178`). B production callers and C
+status/incident REST producers remain integration work; this checkout does not
+change upstream branches.
 
 The migration order is deliberately:
 
@@ -22,23 +21,23 @@ B V2 (auth, sessions, database credential columns)
     -> C V4 (staged Part C tables)
 ```
 
-Only the canonical V1 baseline and the B V2 Java migration are currently in
-the application's migration locations. A V3 migration is not present in this
-candidate. C V4 remains at
-`backend/schema/part-c/V4__part_c_monitoring.sql`, outside the Flyway
-classpath, until the V2/V3 prerequisite contract is finalized. Do not copy the
-staged V4 into `backend/src/main/resources/db/migration` as a realtime
+The application's migration locations now contain the canonical V1 baseline,
+B V2, and Actual A V3. A V3 creates the production `event_outbox` and
+`processed_events` tables and migrates A metric timestamps to `TIMESTAMPTZ`,
+represented by `Instant` in the A model. C V4 remains at
+`backend/schema/part-c/V4__part_c_monitoring.sql`, outside the Flyway classpath,
+until the two missing composite-key prerequisites are finalized. Do not copy
+the staged V4 into `backend/src/main/resources/db/migration` as a realtime
 workaround.
 
-The `processed_events` table is an A-owned prerequisite. The only
-`processed_events` DDL in this candidate is the test fixture
-`backend/src/test/resources/realtime/processed-events.sql` (the Stage 3
-integration test enables Spring SQL initialization for that fixture). It is not
-V3 and must not be installed by production startup. `REALTIME_ENABLED` defaults
-to `false` through
+The `processed_events` table is A-owned production infrastructure supplied by
+V3. The full Stage 3 integration runs against that Actual A V3 table; isolated
+consumer tests mirror the required table inline with `VARCHAR(128)` stream and
+consumer-group columns. `REALTIME_ENABLED` defaults to `false` through
 `monitoring.realtime.enabled: ${REALTIME_ENABLED:false}`. Enabling realtime in
-an environment that has no A V3 `processed_events` table fails closed when the
-consumer verifies its prerequisite; it does not create a C-owned table.
+an environment that has no Actual A V3 `processed_events` table fails closed
+when the consumer verifies its prerequisite; it does not create a C-owned
+table.
 
 The staged V4 also requires a composite key
 `UNIQUE (sid, user_id)` on `auth_sessions` for its session-owner foreign key.
@@ -47,11 +46,18 @@ index on `user_id`, but does not create that composite unique constraint. This
 is an integration gate for B/A migration reconciliation. The test fixture under
 `backend/schema/part-c/test-fixtures/V2_V3_prerequisites.sql` supplies the
 required key so that staged-schema probes can be run in isolation; it does not
-represent the production B migration.
+represent the production B migration. Actual A V3 likewise still lacks
+`UNIQUE (id, database_config_id)` on `metric_data`, so both keys remain V4 gates.
 
-The contract handoff commit `3586788` is in a separate checkout as a local
-patch. Upload permission is pending, so this document does not claim that a
-contract PR was published.
+Lifecycle events use A's common `OutboxWriter` and `OutboxEventType`: C supplies
+body-only JSON, the `database:<id>` ordering key, and flushes each append. The
+writer adds the common envelope and routes status and incident events to their
+own streams. C's occurrence time remains in the event body and is distinct from
+the writer's envelope creation time.
+
+The PR6 interface and DTO contract remains canonical and unchanged. Contract
+handoff commit `3586788` is published and merged into `develop`; this checkout
+records local integration facts only.
 
 ## What the current realtime code does
 
@@ -234,14 +240,15 @@ $env:STAGE3_APP_PORT = '18093'
   --no-daemon --console=plain
 ```
 
-That class starts with `spring.sql.init.schema-locations=classpath:realtime/processed-events.sql`,
-seeds a user and three target rows, and uses the configured Stage 3 stream
-(default `stream:stage3-integration`); it is not a
-production migration or a default test-suite prerequisite. The class also
-asserts that Flyway version `3` is absent. Run it against an isolated disposable
-PostgreSQL database because the fixture seeds target IDs 12, 13, and 14. It
-deletes only the explicitly configured Stage 3 stream and dead-letter stream
-between scenarios; use unique `STAGE3_STREAM_KEY`,
+That class uses the Actual A V3 `processed_events` and `event_outbox` tables,
+asserts Flyway versions `1`, `2`, and `3` with no V4, seeds a user and three
+target rows, and uses the configured Stage 3 stream (default
+`stream:stage3-integration`). Isolated consumer tests mirror `processed_events`
+inline with `VARCHAR(128)` stream and consumer-group columns. Run the full
+check against an isolated disposable PostgreSQL database because the fixture
+seeds target IDs 12, 13, and 14. It deletes only the explicitly configured
+Stage 3 stream and dead-letter stream between scenarios; use unique
+`STAGE3_STREAM_KEY`,
 `STAGE3_DEAD_LETTER_STREAM`, and `STAGE3_APP_PORT` values when sharing a host.
 
 To inspect a checked contract payload without using the realtime stream, the
@@ -287,11 +294,11 @@ handoff, native WebSocket/STOMP CONNECT and subscription authorization,
 metric delivery, protocol/subscription errors, token expiry, logout
 revalidation, and the ordered error-before-close behavior.
 
-The live check creates `processed_events` from
-`backend/src/test/resources/realtime/processed-events.sql`; that fixture is not
-the A V3 migration. The production migration must supply A V3 before
-`REALTIME_ENABLED=true`; otherwise the consumer fails closed when the table is
-missing. C V4 remains staged outside Flyway until the V2/V3 keys and migration
-order are finalized, including the required `UNIQUE (sid, user_id)` key. The
-Compose commands above are local recipes and require Docker Compose; no Docker
-execution is implied by this document.
+The live check uses Actual A V3's production `processed_events` table when run
+against the integrated application. Isolated consumer checks mirror the table
+inline and must not be read as a migration receipt. C V4 remains staged outside
+Flyway until both V2/V3 keys are present:
+`UNIQUE (sid, user_id)` on `auth_sessions` and `UNIQUE (id,
+database_config_id)` on `metric_data`. The Compose commands above are local
+recipes and require Docker Compose; no Docker execution is implied by this
+document.
