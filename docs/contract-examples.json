@@ -442,7 +442,7 @@
       "schemaVersion": 1,
       "eventId": "d2f6c8a1-6a72-4f84-9dd1-28cf5a1c9e64",
       "eventType": "IncidentCreatedEvent",
-      "publishedAt": "2026-09-28T04:01:00.050Z",
+      "publishedAt": "2026-09-28T04:01:00.000Z",
       "timestamp": "2026-09-28T04:01:00.000Z",
       "sourceEventId": null,
       "incidentId": "d04f7fb6-3c6a-4c9f-8f61-5dc0c3c6652a",
@@ -623,6 +623,25 @@
       }
     },
     {
+      "id": "accepted-observation-fresh",
+      "kind": "state-boundary",
+      "input": {
+        "enabled": true,
+        "activationAt": "2026-09-28T04:00:00.000Z",
+        "latestAcceptedCollectionAttemptAt": "2026-09-28T04:00:30.000Z",
+        "openIncidentRefs": [],
+        "staleAfterSeconds": 60,
+        "evaluatedAt": "2026-09-28T04:00:59.999Z"
+      },
+      "expected": {
+        "elapsedSeconds": 29.999,
+        "dataFreshness": "FRESH",
+        "stale": false,
+        "riskLevel": null,
+        "basis": "LAST_ACCEPTED_COLLECTION_ATTEMPT"
+      }
+    },
+    {
       "id": "stale-boundary-at",
       "kind": "state-boundary",
       "input": {
@@ -646,11 +665,11 @@
       "kind": "state-boundary",
       "input": {
         "enabled": true,
-        "activationAt": "2026-09-28T04:00:00.000Z",
-        "latestAcceptedCollectionAttemptAt": "2026-09-28T03:59:00.000Z",
-        "openIncidentRefs": ["connectionFailureIncidentEvent"],
+        "activationAt": "2026-09-28T03:59:00.000Z",
+        "latestAcceptedCollectionAttemptAt": "2026-09-28T04:00:00.000Z",
+        "openIncidentRefs": ["collectionStaleIncidentEvent", "connectionFailureIncidentEvent"],
         "staleAfterSeconds": 60,
-        "evaluatedAt": "2026-09-28T04:00:00.000Z"
+        "evaluatedAt": "2026-09-28T04:01:00.000Z"
       },
       "expected": {
         "elapsedSeconds": 60,
@@ -665,17 +684,21 @@
       "kind": "policy-change",
       "input": {
         "databaseConfigId": 12,
-        "changedAt": "2026-09-28T03:30:00.000Z",
+        "changedAt": "2026-09-28T04:02:00.000Z",
         "oldPolicyVersion": 1,
         "newPolicyVersion": 2,
-        "openIncidentRefs": ["incidentOpenedEvent", "connectionFailureIncidentEvent"]
+        "openIncidentRefs": ["incidentOpenedEvent", "connectionFailureIncidentEvent", "collectionStaleIncidentEvent"]
       },
       "expected": {
         "resolvedIncidentRefs": ["incidentOpenedEvent"],
-        "maintainedIncidentRefs": ["connectionFailureIncidentEvent"],
+        "maintainedIncidentRefs": ["connectionFailureIncidentEvent", "collectionStaleIncidentEvent"],
         "resolutionReason": "POLICY_CHANGED",
         "metricTimers": "RESET",
-        "systemIncidents": "MAINTAIN_OPEN"
+        "systemIncidents": "MAINTAIN_OPEN",
+        "systemTimers": {
+          "CONNECTION_FAILURE": "MAINTAIN",
+          "COLLECTION_STALE": "MAINTAIN"
+        }
       }
     },
     {
@@ -711,6 +734,16 @@
           "observedAt": "2026-09-28T03:10:10.000Z",
           "status": "PENDING",
           "expired": false
+        },
+        "atEligibility": {
+          "observedAt": "2026-09-28T04:00:00.000Z",
+          "status": "READY",
+          "expired": false
+        },
+        "atExpiry": {
+          "observedAt": "2026-09-28T04:10:00.000Z",
+          "status": "CANCELLED",
+          "expired": true
         },
         "mergedEscalationDoesNotSlideEligibility": true,
         "mergedEscalationEligibleAt": "2026-09-28T04:00:00.000Z",

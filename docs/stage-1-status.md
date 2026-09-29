@@ -26,15 +26,17 @@ fixture는 정상 0 값과 부분 실패(null 및 `unavailableMetrics`)를 구�
 
 ## 검증 방법과 완료 기준
 
-반복 가능한 검증 명령은 `node scripts/validate-contracts.mjs`이다. 최종 fixture 담당 결과는 문법 검사와 기본·명시 경로 검증이 성공하고, malformed/semantic-null/semantic-STOMP/stale 변형을 exit 1로 거부하며, 기준 fixture 10/10 보존과 임시 입력 정리를 확인했다. 이 결과는 백엔드 런타임 동작을 증명하지 않는다.
+반복 가능한 검증 명령은 `node scripts/validate-contracts.mjs`와 `node --test scripts/validate-contracts.test.mjs`이다. 최종 fixture 담당 결과는 문법 검사와 기본·명시 경로 검증이 성공하고, malformed/semantic-null/semantic-STOMP/stale 변형을 exit 1로 거부하며, 기준 fixture 10/10 보존과 임시 입력 정리를 확인했다. 이 결과는 백엔드 런타임 동작을 증명하지 않는다.
 
 완료 기준 중 계약 문서와 [공유 fixture](contract-examples.json)의 링크·필드 의미, 정상 0·부분 실패·중복/지연·cooldown·STALE·정책 종료 시나리오를 검증했다. 실제 결과는 다음과 같다.
 
 ```text
 $ node scripts/validate-contracts.mjs
-VALID: <repository>/docs/contract-examples.json fixtures=18 scenarios=9
+VALID: <repository>/docs/contract-examples.json fixtures=18 scenarios=10
 $ node scripts/validate-contracts.mjs docs/contract-examples.json
-VALID: <repository>/docs/contract-examples.json fixtures=18 scenarios=9
+VALID: <repository>/docs/contract-examples.json fixtures=18 scenarios=10
+$ node --test scripts/validate-contracts.test.mjs
+tests 25; pass 25; fail 0
 $ node --check scripts/validate-contracts.mjs
 exit=0
 $ git diff --check -- docs/README.md docs/stage-1-status.md

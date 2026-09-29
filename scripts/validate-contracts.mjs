@@ -47,6 +47,23 @@ const metricEventFields = [
   "errorMessage",
   "unavailableMetrics",
 ];
+const requiredMetricMappings = new Set([
+  "metricSuccess->metricCollectedEvent",
+  "metricMeasuredZero->metricMeasuredZeroEvent",
+  "metricPartialFailure->metricPartialFailureEvent",
+]);
+const requiredScenarioIds = new Set([
+  "duplicate-event-id",
+  "late-out-of-order-event",
+  "old-config-event",
+  "accepted-partial-failure-resets-timers",
+  "stale-boundary-before",
+  "accepted-observation-fresh",
+  "stale-boundary-at",
+  "stale-preserves-fatal-risk",
+  "policy-change-metric-only",
+  "cooldown-3600-keeps-eligibility",
+]);
 const statusFields = [
   "databaseConfigId",
   "configVersion",
@@ -236,6 +253,11 @@ function validateIncident(event, label) {
   id(event.incidentId, `${label}.incidentId`); safeInt(event.databaseConfigId, `${label}.databaseConfigId`); safeInt(event.incidentVersion, `${label}.incidentVersion`);
   check(typeof event.databaseName === "string" && event.databaseName.length > 0, `${label}.databaseName must be text`); check(typeof event.ruleId === "string" && event.ruleId.length > 0, `${label}.ruleId must be text`);
   check(["WARNING", "CRITICAL", "FATAL"].includes(event.severity), `${label}.severity is invalid`); check(["OPEN", "RESOLVED"].includes(event.status), `${label}.status is invalid`);
+  if (event.eventType === "IncidentResolvedEvent") {
+    check(event.status === "RESOLVED", `${label} IncidentResolvedEvent must have status RESOLVED`);
+  } else {
+    check(event.status === "OPEN", `${label} ${event.eventType} must have status OPEN`);
+  }
   check(event.resolutionReason === null || ["RECOVERED", "POLICY_CHANGED", "MONITORING_PAUSED", "CONFIG_CHANGED", "TARGET_DELETED"].includes(event.resolutionReason), `${label}.resolutionReason is invalid`);
   check(typeof event.metricName === "string" && event.metricName.length > 0, `${label}.metricName must be text`); number(event.metricValue, `${label}.metricValue`); number(event.thresholdValue, `${label}.thresholdValue`); if (event.sourceMetricId !== null) safeInt(event.sourceMetricId, `${label}.sourceMetricId`);
   check(typeof event.message === "string" && event.message.length > 0, `${label}.message must be text`); check(event.openedAt <= event.lastObservedAt, `${label}.openedAt cannot be later than lastObservedAt`);
@@ -272,11 +294,19 @@ function same(a, b, fields) { return fields.every(field => JSON.stringify(a?.[fi
 function validateMappings(data) {
   const mappings = data.mappings; check(object(mappings), "mappings must be an object"); if (!object(mappings)) return;
   check(Array.isArray(mappings.metricRestToInternal), "mappings.metricRestToInternal must be an array");
+  const mappingKeys = [];
   for (const [i, mapping] of (mappings.metricRestToInternal ?? []).entries()) {
     if (!required(mapping, ["restRef", "eventRef"], `mappings.metricRestToInternal[${i}]`)) continue;
+    mappingKeys.push(`${mapping.restRef}->${mapping.eventRef}`);
     const rest = fixture(data, mapping.restRef, `mappings.metricRestToInternal[${i}]`); const event = fixture(data, mapping.eventRef, `mappings.metricRestToInternal[${i}]`);
     if (!rest || !event) continue; check(event.eventType === "MetricCollectedEvent", `mappings.metricRestToInternal[${i}] event must be MetricCollectedEvent`); check(rest.id === event.metricId && rest.databaseConfigId === event.databaseConfigId && rest.configVersion === event.configVersion, `mappings.metricRestToInternal[${i}] identity does not match`); check(same(rest, event, ["databaseConfigId", "configVersion", "timestamp", "collectionAttemptTime", "lastSuccessAt", ...metricFields, "collectionStatus", "errorCode", "errorMessage", "unavailableMetrics"]), `mappings.metricRestToInternal[${i}] metric fields do not match`);
   }
+  check(new Set(mappingKeys).size === mappingKeys.length, "duplicate metric mapping is not allowed");
+  for (const requiredMapping of requiredMetricMappings) {
+    check(mappingKeys.includes(requiredMapping), `required metric mapping ${requiredMapping} is missing`);
+  }
+  check(mappingKeys.length === requiredMetricMappings.size,
+    "metricRestToInternal must contain exactly the required metric mappings");
   const status = mappings.statusInternalToStomp; if (!required(status, ["internalRef", "stompRef"], "mappings.statusInternalToStomp")) return;
   const internal = fixture(data, status.internalRef, "mappings.statusInternalToStomp"); const stomp = fixture(data, status.stompRef, "mappings.statusInternalToStomp"); if (!internal || !stomp) return;
   check(internal.eventType === "MonitoringStatusChangedEvent", "internal status mapping must use MonitoringStatusChangedEvent"); check(stomp.eventType === "MonitoringStatusChanged", "STOMP status mapping must use MonitoringStatusChanged"); check(internal.eventId === stomp.eventId, "internal and STOMP status eventId must be preserved"); check(internal.databaseConfigId === stomp.databaseConfigId, "internal and STOMP status target must match"); check(same(internal, stomp.data, statusFields.filter(field => field !== "databaseConfigId")), "internal and STOMP status data do not match");
@@ -308,7 +338,7 @@ function validateEventSequence(data, scenario) {
    }
   if (expected.reason === "LATE_OR_OUT_OF_ORDER") check(new Date(second?.timestamp) < new Date(first?.timestamp) && expected.ignoredInputIndexes?.includes(1), `${scenario.id} late expectation is inconsistent`);
   if (expected.reason === "OLD_CONFIG_VERSION") check(second?.configVersion < first?.configVersion && expected.ignoredInputIndexes?.includes(1), `${scenario.id} old-config expectation is inconsistent`);
-  if (expected.reason === "ACCEPTED_INVALID_OBSERVATION") check(expected.acceptedInputIndexes?.some(index => fixture(data, input[index].fixtureRef, scenario.id)?.collectionStatus === "PARTIAL_FAILURE") && String(expected.timerAction).startsWith("RESET"), `${scenario.id} invalid-observation expectation is inconsistent`);
+  if (expected.reason === "ACCEPTED_INVALID_OBSERVATION") check(expected.acceptedInputIndexes?.some(index => fixture(data, input[index].fixtureRef, scenario.id)?.collectionStatus === "PARTIAL_FAILURE") && expected.timerAction === "RESET_CANDIDATE_AND_RECOVERY_TIMERS", `${scenario.id} invalid-observation expectation must use RESET_CANDIDATE_AND_RECOVERY_TIMERS`);
 }
 
 function validateScenario(data, scenario) {
@@ -326,12 +356,18 @@ function validateScenario(data, scenario) {
      safeInt(input.staleAfterSeconds, `${scenario.id}.input.staleAfterSeconds`);
      check(input.staleAfterSeconds >= 30 && input.staleAfterSeconds <= 300, `${scenario.id}.staleAfterSeconds is outside contract range`);
      check(Array.isArray(input.openIncidentRefs), `${scenario.id}.openIncidentRefs must be an array`);
+     if (input.latestAcceptedCollectionAttemptAt !== null) {
+       check(new Date(input.latestAcceptedCollectionAttemptAt) >= new Date(input.activationAt),
+         `${scenario.id} accepted observation cannot precede activationAt`);
+     }
      const rank = { INFO: 1, WARNING: 2, CRITICAL: 3, FATAL: 4 };
      let highest = 0;
      for (const ref of input.openIncidentRefs ?? []) {
        const open = fixture(data, ref, scenario.id);
        if (!open) continue;
        check(open.status === "OPEN", `${scenario.id} openIncidentRefs must be OPEN`);
+       check(new Date(open.publishedAt) <= new Date(input.evaluatedAt),
+         `${scenario.id} incident must exist by evaluatedAt`);
        highest = Math.max(highest, rank[open.severity] ?? 0);
      }
      const basis = input.latestAcceptedCollectionAttemptAt === null
@@ -339,17 +375,43 @@ function validateScenario(data, scenario) {
        : "LAST_ACCEPTED_COLLECTION_ATTEMPT";
      const referenceAt = input.latestAcceptedCollectionAttemptAt ?? input.activationAt;
      const elapsed = (new Date(input.evaluatedAt) - new Date(referenceAt)) / 1000;
+     check(elapsed >= 0, `${scenario.id}.evaluatedAt cannot precede its freshness basis`);
      check(Math.abs(elapsed - expected.elapsedSeconds) < 0.001, `${scenario.id}.elapsedSeconds is inconsistent`);
      const stale = elapsed >= input.staleAfterSeconds;
-     check(expected.stale === stale && expected.dataFreshness === (stale ? "STALE" : "NO_DATA"), `${scenario.id} stale boundary expectation is inconsistent`);
+     const freshness = stale
+       ? "STALE"
+       : input.latestAcceptedCollectionAttemptAt === null ? "NO_DATA" : "FRESH";
+     check(expected.stale === stale && expected.dataFreshness === freshness,
+       input.latestAcceptedCollectionAttemptAt !== null && !stale
+         ? `${scenario.id} accepted non-stale observation must be FRESH`
+         : `${scenario.id} stale boundary expectation is inconsistent`);
      check(expected.basis === basis, `${scenario.id} stale basis is inconsistent`);
+     if (stale) {
+       const hasStaleIncident = (input.openIncidentRefs ?? []).some(ref => {
+         const incident = data.fixtures?.[ref];
+         return incident?.status === "OPEN" &&
+           incident.ruleId === "COLLECTION_STALE" &&
+           incident.severity === "CRITICAL";
+       });
+       check(hasStaleIncident,
+         `${scenario.id} STALE requires an OPEN COLLECTION_STALE CRITICAL incident`);
+     }
      const expectedRank = expected.riskLevel === null ? 0 : rank[expected.riskLevel];
      check(expectedRank === highest, `${scenario.id} riskLevel must be the highest OPEN severity`);
   } else if (scenario.kind === "policy-change") {
-    const input = scenario.input; const expected = scenario.expected; if (!required(input, ["databaseConfigId", "changedAt", "oldPolicyVersion", "newPolicyVersion", "openIncidentRefs"], `${scenario.id}.input`) || !required(expected, ["resolvedIncidentRefs", "maintainedIncidentRefs", "resolutionReason", "metricTimers", "systemIncidents"], `${scenario.id}.expected`)) return;
+    const input = scenario.input; const expected = scenario.expected; if (!required(input, ["databaseConfigId", "changedAt", "oldPolicyVersion", "newPolicyVersion", "openIncidentRefs"], `${scenario.id}.input`) || !required(expected, ["resolvedIncidentRefs", "maintainedIncidentRefs", "resolutionReason", "metricTimers", "systemIncidents", "systemTimers"], `${scenario.id}.expected`)) return;
     safeInt(input.databaseConfigId, `${scenario.id}.input.databaseConfigId`); safeInt(input.oldPolicyVersion, `${scenario.id}.input.oldPolicyVersion`); safeInt(input.newPolicyVersion, `${scenario.id}.input.newPolicyVersion`); check(input.newPolicyVersion === input.oldPolicyVersion + 1, `${scenario.id} policy version must increment`); time(input.changedAt, `${scenario.id}.input.changedAt`); check(Array.isArray(input.openIncidentRefs), `${scenario.id}.openIncidentRefs must be an array`);
-    const metricRefs = [], systemRefs = []; for (const ref of input.openIncidentRefs ?? []) { const incident = fixture(data, ref, scenario.id); if (!incident) continue; check(incident.databaseConfigId === input.databaseConfigId && incident.status === "OPEN", `${scenario.id} incident identity is inconsistent`); (incident.ruleId === "CONNECTION_FAILURE" || incident.ruleId === "COLLECTION_STALE" ? systemRefs : metricRefs).push(ref); }
+    const metricRefs = [], systemRefs = []; for (const ref of input.openIncidentRefs ?? []) { const incident = fixture(data, ref, scenario.id); if (!incident) continue; check(incident.databaseConfigId === input.databaseConfigId && incident.status === "OPEN", `${scenario.id} incident identity is inconsistent`); check(new Date(incident.publishedAt) <= new Date(input.changedAt), `${scenario.id} incident must exist by changedAt`); (incident.ruleId === "CONNECTION_FAILURE" || incident.ruleId === "COLLECTION_STALE" ? systemRefs : metricRefs).push(ref); }
     check(JSON.stringify(expected.resolvedIncidentRefs) === JSON.stringify(metricRefs), `${scenario.id} must resolve metric incidents only`); check(JSON.stringify(expected.maintainedIncidentRefs) === JSON.stringify(systemRefs), `${scenario.id} must maintain system incidents`); check(expected.resolutionReason === "POLICY_CHANGED" && expected.metricTimers === "RESET" && expected.systemIncidents === "MAINTAIN_OPEN", `${scenario.id} policy expectation is inconsistent`);
+    const systemClasses = new Set(systemRefs.map(ref => data.fixtures?.[ref]?.ruleId));
+    check(systemClasses.size === 2 && systemClasses.has("CONNECTION_FAILURE") &&
+      systemClasses.has("COLLECTION_STALE"),
+      `${scenario.id} policy sample must include both system incident classes`);
+    check(object(expected.systemTimers) &&
+      expected.systemTimers.CONNECTION_FAILURE === "MAINTAIN" &&
+      expected.systemTimers.COLLECTION_STALE === "MAINTAIN" &&
+      Object.keys(expected.systemTimers).length === 2,
+      `${scenario.id} system timers must maintain CONNECTION_FAILURE and COLLECTION_STALE`);
   } else if (scenario.kind === "notification-cooldown") {
     const input = scenario.input;
     const expected = scenario.expected;
@@ -357,6 +419,7 @@ function validateScenario(data, scenario) {
         "lastSuccessfulNotificationAt", "queuedAt", "mergedEscalationAt",
         "fatalEscalationAt", "cooldownSeconds", "queuedJob"], `${scenario.id}.input`) ||
         !required(expected, ["status", "eligibleAt", "expiresAt", "at600Seconds",
+        "atEligibility", "atExpiry",
         "mergedEscalationDoesNotSlideEligibility", "mergedEscalationEligibleAt",
         "fatalOverride"], `${scenario.id}.expected`)) return;
     const incident = fixture(data, input.incidentRef, scenario.id);
@@ -390,7 +453,25 @@ function validateScenario(data, scenario) {
       check(expected.eligibleAt === job.eligibleAt && expected.expiresAt === job.expiresAt, `${scenario.id}.expected queue times do not match persisted job`);
     }
     time(expected.at600Seconds?.observedAt, `${scenario.id}.expected.at600Seconds.observedAt`);
+    const at600 = new Date(expected.at600Seconds?.observedAt).getTime();
+    const queuedAt = new Date(input.queuedAt).getTime();
+    const eligibleAt = new Date(expected.eligibleAt).getTime();
+    const expiresAt = new Date(expected.expiresAt).getTime();
+    check(at600 === queuedAt + 600000,
+      `${scenario.id}.at600Seconds must be observed at queuedAt + 600s`);
+    check(at600 < eligibleAt && at600 < expiresAt,
+      `${scenario.id}.at600Seconds must remain before eligibleAt and expiresAt`);
     check(expected.status === "PENDING" && expected.at600Seconds.status === "PENDING" && expected.at600Seconds.expired === false, `${scenario.id} 600s observation must remain pending`);
+    time(expected.atEligibility?.observedAt, `${scenario.id}.expected.atEligibility.observedAt`);
+    check(expected.atEligibility?.observedAt === expected.eligibleAt &&
+      expected.atEligibility?.status === "READY" &&
+      expected.atEligibility?.expired === false,
+      `${scenario.id}.atEligibility must be READY at eligibleAt`);
+    time(expected.atExpiry?.observedAt, `${scenario.id}.expected.atExpiry.observedAt`);
+    check(expected.atExpiry?.observedAt === expected.expiresAt &&
+      expected.atExpiry?.status === "CANCELLED" &&
+      expected.atExpiry?.expired === true,
+      `${scenario.id}.atExpiry must be CANCELLED at expiresAt`);
     check(expected.mergedEscalationDoesNotSlideEligibility === true && expected.mergedEscalationEligibleAt === expected.eligibleAt, `${scenario.id} merged escalation must preserve eligibility`);
     check(expected.fatalOverride?.status === "READY" && expected.fatalOverride.severity === "FATAL" &&
       expected.fatalOverride.eligibleAt === input.fatalEscalationAt && expected.fatalOverride.cancelsQueuedNonFatal === true,
@@ -403,8 +484,13 @@ try { data = JSON.parse(fs.readFileSync(target, "utf8")); } catch (error) { cons
 check(object(data), "document must be an object");
 if (object(data)) {
   check(data.contractVersion === "0.2", "contractVersion must be 0.2"); check(typeof data.description === "string" && data.description.length > 0, "description is required");
-  validateFixtureSet(data); validateMappings(data); check(object(data.notificationPolicy), "notificationPolicy must be an object"); if (object(data.notificationPolicy)) { check(data.notificationPolicy.defaultCooldownSeconds === 300, "default cooldown must remain 300s"); check(data.notificationPolicy.maxCooldownSeconds === 3600, "max cooldown must remain 3600s"); check(data.notificationPolicy.queuedJobTtlSeconds === 600, "queued job TTL must remain 600s"); }
+  validateFixtureSet(data); validateMappings(data); check(object(data.notificationPolicy), "notificationPolicy must be an object"); if (object(data.notificationPolicy)) { check(data.notificationPolicy.defaultCooldownSeconds === 300, "default cooldown must remain 300s"); check(data.notificationPolicy.minCooldownSeconds === 60, "minimum cooldown must remain 60s"); check(data.notificationPolicy.maxCooldownSeconds === 3600, "max cooldown must remain 3600s"); check(data.notificationPolicy.queuedJobTtlSeconds === 600, "queued job TTL must remain 600s"); }
   check(Array.isArray(data.scenarios) && data.scenarios.length > 0, "scenarios must be a non-empty array"); const scenarioIds = new Set(); for (const scenario of data.scenarios ?? []) { if (scenarioIds.has(scenario.id)) check(false, `duplicate scenario id ${scenario.id}`); scenarioIds.add(scenario.id); validateScenario(data, scenario); }
+  for (const requiredScenarioId of requiredScenarioIds) {
+    check(scenarioIds.has(requiredScenarioId), `required scenario id ${requiredScenarioId} is missing`);
+  }
+  check(scenarioIds.size === requiredScenarioIds.size,
+    "scenarios must contain exactly the required scenario IDs");
   const eventIdOwners = new Map(); for (const [name, value] of Object.entries(data.fixtures ?? {})) { if (value?.eventId) { const prior = eventIdOwners.get(value.eventId); if (prior && !(new Set([prior, name]).size === 2 && new Set([prior, name]).has("monitoringStatusChangedEvent") && new Set([prior, name]).has("statusMessage"))) check(false, `eventId ${value.eventId} is duplicated by ${prior} and ${name}`); eventIdOwners.set(value.eventId, name); } }
 }
 if (errors.length) { console.error(`INVALID: ${target}`); for (const error of errors) console.error(`- ${error}`); process.exit(1); }

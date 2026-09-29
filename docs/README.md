@@ -15,7 +15,7 @@
 5. [저장·운영](integration-operations.md): 내부 포트·테이블·마이그레이션·환경·보관·복구
 6. [담당별 적용·검수표](integration-handoff.md): 전달 문구·개발 순서·A/B/C/프론트 작업·28개 검수 시나리오
 
-[정상·실패·복구 메시지 예제 JSON](contract-examples.json): 프론트 mock과 계약 테스트의 입력으로 사용할 수 있는 공유 fixture 18개와 검증 시나리오 9개.
+[정상·실패·복구 메시지 예제 JSON](contract-examples.json): 프론트 mock과 계약 테스트의 입력으로 사용할 수 있는 공유 fixture 18개와 검증 시나리오 10개.
 
 ## 기존 프로젝트 자료
 
