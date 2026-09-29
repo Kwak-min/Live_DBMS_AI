@@ -60,4 +60,3 @@ INSERT INTO metric_data (id, database_config_id, config_version, captured_at)
 VALUES
     (301, 101, 1, '2026-09-29T00:00:00Z'),
     (302, 102, 1, '2026-09-29T00:00:00Z');
-

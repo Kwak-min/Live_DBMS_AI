@@ -53,4 +53,3 @@ psql $probeUrl -v ON_ERROR_STOP=1 -f backend/schema/part-c/probes/cleanup.sql
 The second command is expected to exit nonzero before V4 is applied. The constraint
 probe succeeds only when its final row reports `passed_scenarios=15`. Always run the
 cleanup command, including after a failed probe.
-

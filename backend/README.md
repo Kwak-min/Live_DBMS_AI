@@ -1,17 +1,33 @@
 # Backend
 
-백엔드 코드 디렉터리입니다.
+This Spring Boot application runs on JDK 17 with the repository Gradle 8.5 wrapper. Spring Boot remains at 3.2.3 and springdoc at 2.3.0.
 
-- feature/be-auth: 인증·권한 및 모니터링 대상 DB 관리
-- feature/be-collector: DB 수집·메트릭 저장 및 조회
-- feature/be-notification: 실시간 전송·위험도 판단·장애 알림
+## Local runtime
 
-빌드 기준은 Java 17 / Spring Boot 3.2.3 / Gradle Wrapper 8.5입니다. 구현할 공통 환경·실행 순서는 [저장·운영 규격](../docs/integration-operations.md), 파트 간 통신은 [팀 배포용 규격 v0.2](../docs/integration-contract-draft.md)를 따릅니다. 실제 통합 실행 완료를 의미하지 않습니다.
+1. Install JDK 17 and Docker Compose.
+2. From the repository root, run `./scripts/start-local-services.ps1`. Add `-WithMariaDb` when a target MariaDB 10.11 instance is needed.
+3. From `backend`, run `./scripts/run-local.ps1` or set `SPRING_PROFILES_ACTIVE=local` and run `./gradlew.bat bootRun`.
+4. Stop infrastructure with `./scripts/stop-local-services.ps1`. Named volumes remain intact.
 
-## DB 마이그레이션 (Flyway)
+The compose file publishes PostgreSQL, Redis, and optional MariaDB only on `127.0.0.1`. Redis uses AOF with `appendfsync everysec` and `maxmemory-policy noeviction`. The local profile binds the backend to `127.0.0.1`; staging and production must use the deployment ingress binding and its controls. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
-시스템 DB 스키마는 Flyway로만 변경하며 Hibernate는 `ddl-auto: validate`로 검증만 합니다. 마이그레이션 순서·번호 등록은 A가 관리합니다. V1(A, 기준 스키마) → V2(B) → V3(A) → V4(C). 다른 파트의 migration 파일은 수정하지 않습니다.
+Local defaults connect to PostgreSQL at `localhost:5432/monitoring_db` with the compose-only account and to Redis at `localhost:6379` without a password. These defaults exist only in `application-local.yml`. Staging and production must inject all datasource and Redis values, including passwords. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
-- 새(빈) DB: 애플리케이션 기동 시 자동 적용됩니다.
-- 예전 `ddl-auto: update`로 테이블이 이미 만들어진 로컬 DB: `baseline-on-migrate`가 꺼져 있어 기동이 실패합니다(의도된 동작). 테스트 데이터만 있다면 DB를 새로 만드는 것이 가장 간단합니다. 데이터를 보존해야 하면 백업 후 스키마가 V1과 같은지 확인하고 `flyway baseline -baselineVersion=1`을 명시적으로 실행합니다.
-- `MigrationSchemaTest`는 내장 PostgreSQL 16에서 전체 migration을 적용한 뒤 모든 엔티티가 `validate`를 통과하는지, V1 기존 데이터가 최신 버전까지 이전되는지 검증합니다. 새 migration이나 엔티티를 추가하면 이 테스트가 통과해야 합니다. (V1이 기준 엔티티의 Hibernate 생성 스키마와 컬럼·제약·인덱스까지 같다는 점은 PR #4에서 1회 검증했습니다.)
+## Migrations
+
+Flyway owns schema creation and Hibernate uses `ddl-auto=validate`. Automatic baselining and Flyway clean are disabled. `V1__baseline_existing_schema.sql` creates exactly the four current legacy entity tables. Existing databases must be backed up, compared with V1, and explicitly baselined at version 1 only after they match; the application never baselines, drops, or rewrites existing data automatically.
+
+V1 deliberately preserves Java `LocalDateTime` as PostgreSQL `timestamp without time zone`. The later A/B data conversion must require `LEGACY_TIME_ZONE`; do not infer an unknown historical zone. Migration ownership is coordinated as V1 legacy/A coordination, V2 Part B, V3 Part A, and V4 Part C. Part C's staged V4 stays outside `classpath:db/migration` until V2 and V3 exist.
+
+## Verification and endpoints
+
+Run service-free tests with `./gradlew.bat test`; `MigrationSchemaTest` starts embedded PostgreSQL 16 and applies every classpath migration before validating all entities.
+
+Actuator health details and components are hidden. Dedicated readiness and liveness groups from the operations contract are not wired in this stage. OpenAPI (`/v3/api-docs`) and Swagger UI (`/swagger-ui.html`) are enabled only in the local profile. Part B authentication and database-security APIs are present; realtime transport and consumer beans remain disabled unless `REALTIME_ENABLED=true`.
+
+The full environment contract and startup order are documented in [integration-operations.md](../docs/integration-operations.md), with security constraints in [integration-security.md](../docs/integration-security.md).
+
+The checked Stage 3 realtime handoff, including the local B candidate status,
+fixture-only `processed_events` prerequisite, native STOMP frames, and pending
+integration gates, is documented in
+[part-c-realtime.md](../docs/part-c-realtime.md).

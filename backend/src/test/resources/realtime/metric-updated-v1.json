@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "eventId": "b43a63cb-5f28-4f4a-8de1-412c352ba79d",
+  "eventType": "MetricUpdated",
+  "databaseConfigId": 12,
+  "publishedAt": "2026-09-28T03:00:00.050Z",
+  "data": {
+    "id": 501,
+    "databaseConfigId": 12,
+    "configVersion": 2,
+    "timestamp": "2026-09-28T03:00:00.000Z",
+    "collectionAttemptTime": "2026-09-28T03:00:00.000Z",
+    "lastSuccessAt": "2026-09-28T03:00:00.000Z",
+    "cpuUsage": null,
+    "memoryUsage": null,
+    "activeConnections": 18,
+    "maxConnections": 151,
+    "qps": 24.2,
+    "slowQueries": 310,
+    "slowQueriesDelta": 2,
+    "slowQueriesPerSecond": 0.4,
+    "metricWindowSeconds": 5.0,
+    "threadsRunning": 3,
+    "storageBytes": 104857600,
+    "responseTimeMs": 12,
+    "collectionStatus": "SUCCESS",
+    "errorCode": null,
+    "errorMessage": null,
+    "unavailableMetrics": {
+      "cpuUsage": "UNSUPPORTED",
+      "memoryUsage": "UNSUPPORTED"
+    }
+  }
+}
