@@ -49,6 +49,16 @@ CREATE TABLE metric_data (
         CHECK (config_version BETWEEN 1 AND 9007199254740991)
 );
 
+CREATE TABLE event_outbox (
+    event_id UUID PRIMARY KEY,
+    event_type VARCHAR(64) NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    published_at TIMESTAMPTZ,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ NOT NULL
+);
+
 INSERT INTO users (id) VALUES (201), (202);
 INSERT INTO auth_sessions (sid, user_id)
 VALUES

@@ -7,6 +7,7 @@ CREATE TABLE monitoring_states (
     connection_status VARCHAR(16) NOT NULL,
     data_freshness VARCHAR(16) NOT NULL,
     risk_level VARCHAR(16),
+    activation_at TIMESTAMPTZ,
     last_attempt_at TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
     latest_metric_id BIGINT,
@@ -33,8 +34,8 @@ CREATE TABLE monitoring_states (
         CHECK (risk_level IS NULL OR risk_level IN ('INFO', 'WARNING', 'CRITICAL', 'FATAL')),
     CONSTRAINT monitoring_states_lifecycle_check
         CHECK (
-            (enabled AND NOT deleted AND data_freshness <> 'PAUSED')
-            OR (NOT enabled AND data_freshness = 'PAUSED' AND risk_level IS NULL)
+            (enabled AND NOT deleted AND data_freshness <> 'PAUSED' AND activation_at IS NOT NULL)
+            OR (NOT enabled AND data_freshness = 'PAUSED' AND risk_level IS NULL AND activation_at IS NULL)
         ),
     CONSTRAINT monitoring_states_attempt_time_check
         CHECK (last_success_at IS NULL OR last_attempt_at IS NULL OR last_success_at <= last_attempt_at)

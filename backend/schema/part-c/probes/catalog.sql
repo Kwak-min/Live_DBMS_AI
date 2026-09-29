@@ -6,7 +6,20 @@ SELECT string_agg(table_name, ',' ORDER BY table_name) AS part_c_tables
 FROM information_schema.tables
 WHERE table_schema = 'part_c_probe'
   AND table_type = 'BASE TABLE'
-  AND table_name NOT IN ('users', 'auth_sessions', 'database_configs', 'metric_data');
+  AND table_name NOT IN (
+      'users', 'auth_sessions', 'database_configs', 'metric_data', 'event_outbox'
+  );
+
+SELECT column_name, data_type, udt_name, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'part_c_probe'
+  AND table_name = 'monitoring_states'
+  AND column_name = 'activation_at';
+
+SELECT string_agg(column_name, ',' ORDER BY ordinal_position) AS event_outbox_columns
+FROM information_schema.columns
+WHERE table_schema = 'part_c_probe'
+  AND table_name = 'event_outbox';
 
 SELECT count(*) AS part_c_foreign_keys
 FROM information_schema.table_constraints

@@ -6,16 +6,19 @@ services, notification workers, repositories, or APIs.
 
 ## Current candidate status
 
-This remains the Stage 2 foundation record. In the current isolated C
-candidate, the B V2 Java migration is merged locally but its upstream pull
-request is still unmerged; A V3 and C V4 are not active in the application's
-classpath. The `processed_events` table and its DDL remain an A V3
-prerequisite, with a disposable test-only fixture used by the Stage 3
-integration test. The checked B V2 migration also still needs the
-`UNIQUE (sid, user_id)` prerequisite required by the staged V4 composite
-foreign key. See [the Stage 3 realtime handoff](part-c-realtime.md) for the
-current refs, commands, and verification boundaries. The historical probe
-results below are Stage 2 evidence and are not Stage 3 approval.
+This remains the Stage 2 foundation record. The compatibility branch contains
+the merged develop baseline and its active Flyway inventory is A V1 plus the
+B-owned V2 Java migration. Real A V3 and C V4 are not active in the
+application's classpath. The checked B V2 migration still does not expose the
+`UNIQUE (sid, user_id)` prerequisite required by the staged V4 composite foreign
+key. A V3, including `processed_events` and the production `event_outbox`, is
+still absent; the seven-column outbox shape in the staged fixture is disposable
+test data only. Staged V4 now persists nullable `activation_at` and enforces
+the enabled/nondeleted and disabled/deleted lifecycle rules around that value.
+Production V4 registration, upgrade verification, and activation backfill remain
+blocked until the A and B prerequisites are delivered and verified. See [the
+Stage 3 realtime handoff](part-c-realtime.md) for the current refs, commands,
+and verification boundaries.
 
 ## Ownership and prerequisites
 
@@ -24,7 +27,7 @@ results below are Stage 2 evidence and are not Stage 3 approval.
 | Accounts and sessions | B | `users(id)` and `auth_sessions(sid,user_id)`; V2 must expose `UNIQUE (sid,user_id)` for session-owner integrity |
 | Monitored targets | B | `database_configs(id)`; targets are soft-deleted and their IDs are not reused |
 | Metrics | A | `metric_data(id,database_config_id)`; V3 must expose `UNIQUE (id,database_config_id)` for target-scoped metric references |
-| Reliable events | A common | `event_outbox` and `processed_events`; C writes/reads them through the common interfaces and does not duplicate them |
+| Reliable events | A common | `event_outbox` and `processed_events`; C writes/reads them through the common interfaces and does not duplicate them. The staged fixture's seven-column outbox is provisional and test-only. |
 | Status, risk, incidents, recipients, deliveries | C | The seven tables in the staged V4 |
 | Recipient encryption service and key ring | B security boundary | C persists only key version, 12-byte nonce, and ciphertext-with-tag returned by the shared encryption boundary |
 
@@ -36,7 +39,7 @@ fallback or fake account, session, target, metric, outbox, or dedup tables.
 
 | Table | Durable responsibility |
 | --- | --- |
-| `monitoring_states` | One current status row per target, with config/state versions, lifecycle flags, freshness/risk, attempt/success times, and a target-scoped latest metric pointer |
+| `monitoring_states` | One current status row per target, with config/state versions, lifecycle flags, nullable activation time, freshness/risk, attempt/success times, and a target-scoped latest metric pointer |
 | `risk_policies` | One versioned policy per target; PostgreSQL checks ranges and that `rules` is a JSON array, while the API layer owns the two-rule semantic validation |
 | `incidents` | UUID incident history, target/name snapshot, rule/severity/status, resolution evidence, metric evidence snapshot, source event/metric, and incident version |
 | `risk_rule_states` | Restart-safe observation cursor plus independent WARNING, CRITICAL, and FATAL candidate clocks and the recovery clock for each target/rule |
@@ -78,8 +81,9 @@ identity/deduplication; they are not reversible endpoint storage.
 V4 remains at `backend/schema/part-c/V4__part_c_monitoring.sql` until both V2 and V3
 are integrated. The A migration owner controls version registration and must move
 the unchanged file into Flyway's active migration directory only after checking the
-stable prerequisite keys, an empty V1-to-V4 apply, and a V3-to-V4 upgrade. Part C
-must not patch V2/V3 from this staged migration.
+stable prerequisite keys, an empty V1-to-V4 apply, and a V3-to-V4 upgrade. The
+activation backfill must also be planned against the final V3 state before V4 is
+registered. Part C must not patch V2/V3 from this staged migration.
 
 The integrated application keeps the Stage 3 realtime beans disabled by default with
 `monitoring.realtime.enabled: ${REALTIME_ENABLED:false}`. Set `REALTIME_ENABLED=true`
@@ -141,11 +145,13 @@ absent after cleanup, and the bounded harness stopped its server.
 
 ## Verification record
 
-The isolated PostgreSQL 16.14 run used the test-only fixture, captured the expected
-pre-V4 `42P01` failure, then applied V4 and passed all fifteen scenarios. The probes
-cover exact table count, separate severity clocks, OPEN uniqueness, resolution
-coherence, recipient encryption shape and session ownership, active endpoint
-uniqueness with tombstone reuse, delivery deduplication, enum/version/count/safe-ID
-checks, and metric-retention evidence. The probe schema and server are removed
-after the run; final command logs and receipts are retained with the
-integration handoff separately from this teammate-facing boundary document.
+The embedded PostgreSQL run uses the test-only fixture, captures the expected
+pre-V4 `42P01` failure, rejects V4 with `42830` when the B composite key is
+removed, then applies V4 and passes 21 scenarios. The probes cover exact table
+count, activation type and lifecycle coherence, the provisional seven-column
+outbox shape, separate severity clocks, OPEN uniqueness, resolution coherence,
+recipient encryption shape and session ownership, active endpoint uniqueness with
+tombstone reuse, delivery deduplication, enum/version/count/safe-ID checks, and
+metric-retention evidence. Each test removes the probe schema in its cleanup
+path, the embedded server closes in the suite teardown, and the cleanup SQL
+confirms that `part_c_probe` is gone.

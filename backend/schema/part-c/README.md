@@ -31,11 +31,12 @@ database; the isolated fixture below is not that integration test.
 ## Isolated probe files
 
 - `test-fixtures/V2_V3_prerequisites.sql` creates only a disposable test schema and
-  the minimum prerequisite shapes. It is not a B or A production migration.
+  the minimum prerequisite shapes, including a seven-column provisional
+  `event_outbox`. It is not a B or A production migration.
 - `probes/pre-v4-missing-schema.sql` is the red-phase probe and must fail with
   SQLSTATE `42P01` immediately after the fixture.
-- `probes/constraints.sql` checks the seven-table set and fifteen storage
-  invariants.
+- `probes/constraints.sql` checks the seven-table set, activation/outbox shape,
+  lifecycle coherence, and the fifteen existing storage invariants.
 - `probes/cleanup.sql` removes only the `part_c_probe` schema.
 
 Run against a disposable PostgreSQL 16 database, never a shared or production
@@ -51,5 +52,5 @@ psql $probeUrl -v ON_ERROR_STOP=1 -f backend/schema/part-c/probes/cleanup.sql
 ```
 
 The second command is expected to exit nonzero before V4 is applied. The constraint
-probe succeeds only when its final row reports `passed_scenarios=15`. Always run the
+probe succeeds only when its final row reports `passed_scenarios=21`. Always run the
 cleanup command, including after a failed probe.

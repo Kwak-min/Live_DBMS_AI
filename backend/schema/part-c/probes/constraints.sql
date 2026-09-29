@@ -22,7 +22,9 @@ BEGIN
     FROM information_schema.tables
     WHERE table_schema = 'part_c_probe'
       AND table_type = 'BASE TABLE'
-      AND table_name NOT IN ('users', 'auth_sessions', 'database_configs', 'metric_data');
+      AND table_name NOT IN (
+          'users', 'auth_sessions', 'database_configs', 'metric_data', 'event_outbox'
+      );
 
     IF actual_tables IS DISTINCT FROM expected_tables THEN
         RAISE EXCEPTION 'unexpected Part C tables: %', actual_tables;
@@ -55,6 +57,59 @@ BEGIN
 END
 $probe$;
 
+DO $probe$
+DECLARE
+    activation_type TEXT;
+    activation_nullable TEXT;
+BEGIN
+    SELECT udt_name, is_nullable
+    INTO activation_type, activation_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'part_c_probe'
+      AND table_name = 'monitoring_states'
+      AND column_name = 'activation_at';
+
+    IF activation_type <> 'timestamptz' OR activation_nullable <> 'YES' THEN
+        RAISE EXCEPTION 'activation_at must be nullable TIMESTAMPTZ: %, %',
+            activation_type, activation_nullable;
+    END IF;
+
+    INSERT INTO part_c_probe_results VALUES ('activation_at_nullable_timestamptz');
+END
+$probe$;
+
+DO $probe$
+DECLARE
+    outbox_columns TEXT[];
+    typed_columns INTEGER;
+BEGIN
+    SELECT array_agg(column_name ORDER BY ordinal_position)
+    INTO outbox_columns
+    FROM information_schema.columns
+    WHERE table_schema = 'part_c_probe'
+      AND table_name = 'event_outbox';
+
+    SELECT count(*)
+    INTO typed_columns
+    FROM information_schema.columns
+    WHERE table_schema = 'part_c_probe'
+      AND table_name = 'event_outbox'
+      AND ((column_name = 'payload' AND udt_name = 'jsonb')
+           OR (column_name IN ('created_at', 'published_at', 'next_attempt_at')
+               AND udt_name = 'timestamptz'));
+
+    IF outbox_columns IS DISTINCT FROM ARRAY[
+        'event_id', 'event_type', 'payload', 'created_at', 'published_at',
+        'attempts', 'next_attempt_at'
+    ] OR typed_columns <> 4 THEN
+        RAISE EXCEPTION 'unexpected event_outbox shape: %, typed columns %',
+            outbox_columns, typed_columns;
+    END IF;
+
+    INSERT INTO part_c_probe_results VALUES ('event_outbox_exact_seven_columns');
+END
+$probe$;
+
 INSERT INTO monitoring_states (
     database_config_id,
     config_version,
@@ -64,6 +119,7 @@ INSERT INTO monitoring_states (
     connection_status,
     data_freshness,
     risk_level,
+    activation_at,
     last_attempt_at,
     last_success_at,
     latest_metric_id,
@@ -77,6 +133,7 @@ INSERT INTO monitoring_states (
     'UP',
     'FRESH',
     'WARNING',
+    '2026-09-29T00:00:00Z',
     '2026-09-29T00:00:10Z',
     '2026-09-29T00:00:10Z',
     301,
@@ -604,6 +661,38 @@ BEGIN
 END
 $probe$;
 
+INSERT INTO monitoring_states (
+    database_config_id,
+    config_version,
+    state_version,
+    enabled,
+    deleted,
+    connection_status,
+    data_freshness,
+    risk_level,
+    activation_at
+) VALUES (
+    102,
+    1,
+    1,
+    FALSE,
+    FALSE,
+    'DOWN',
+    'PAUSED',
+    NULL,
+    NULL
+);
+
+INSERT INTO part_c_probe_results VALUES ('disabled_activation_coherent');
+
+UPDATE monitoring_states
+SET deleted = TRUE
+WHERE database_config_id = 102;
+
+INSERT INTO part_c_probe_results VALUES ('deleted_state_activation_coherent');
+
+DELETE FROM monitoring_states WHERE database_config_id = 102;
+
 DO $probe$
 DECLARE
     rejected BOOLEAN := FALSE;
@@ -618,6 +707,95 @@ BEGIN
             deleted,
             connection_status,
             data_freshness,
+            risk_level,
+            activation_at
+        ) VALUES (
+            102,
+            1,
+            1,
+            TRUE,
+            FALSE,
+            'UP',
+            'NO_DATA',
+            NULL,
+            NULL
+        );
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS actual_state = RETURNED_SQLSTATE;
+        IF actual_state = '23514' THEN
+            rejected := TRUE;
+        ELSE
+            RAISE;
+        END IF;
+    END;
+
+    IF NOT rejected THEN
+        RAISE EXCEPTION 'enabled state without activation_at was accepted';
+    END IF;
+
+    INSERT INTO part_c_probe_results VALUES ('enabled_activation_required');
+END
+$probe$;
+
+DO $probe$
+DECLARE
+    rejected BOOLEAN := FALSE;
+    actual_state TEXT;
+BEGIN
+    BEGIN
+        INSERT INTO monitoring_states (
+            database_config_id,
+            config_version,
+            state_version,
+            enabled,
+            deleted,
+            connection_status,
+            data_freshness,
+            risk_level,
+            activation_at
+        ) VALUES (
+            102,
+            1,
+            1,
+            FALSE,
+            FALSE,
+            'DOWN',
+            'PAUSED',
+            NULL,
+            '2026-09-29T00:00:00Z'
+        );
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS actual_state = RETURNED_SQLSTATE;
+        IF actual_state = '23514' THEN
+            rejected := TRUE;
+        ELSE
+            RAISE;
+        END IF;
+    END;
+
+    IF NOT rejected THEN
+        RAISE EXCEPTION 'disabled state with activation_at was accepted';
+    END IF;
+
+    INSERT INTO part_c_probe_results VALUES ('disabled_activation_must_be_null');
+END
+$probe$;
+
+DO $probe$
+DECLARE
+    rejected BOOLEAN := FALSE;
+    actual_state TEXT;
+BEGIN
+    BEGIN
+        INSERT INTO monitoring_states (
+            database_config_id,
+            config_version,
+            state_version,
+            enabled,
+            deleted,
+            connection_status,
+            data_freshness,
+            activation_at,
             updated_at
         ) VALUES (
             102,
@@ -627,6 +805,7 @@ BEGIN
             FALSE,
             'BROKEN',
             'NO_DATA',
+            '2026-09-29T00:00:00Z',
             '2026-09-29T00:00:00Z'
         );
     EXCEPTION WHEN OTHERS THEN
@@ -804,8 +983,8 @@ DECLARE
     scenario_count INTEGER;
 BEGIN
     SELECT count(*) INTO scenario_count FROM part_c_probe_results;
-    IF scenario_count <> 15 THEN
-        RAISE EXCEPTION 'expected 15 passing scenarios, found %', scenario_count;
+    IF scenario_count <> 21 THEN
+        RAISE EXCEPTION 'expected 21 passing scenarios, found %', scenario_count;
     END IF;
 END
 $probe$;
