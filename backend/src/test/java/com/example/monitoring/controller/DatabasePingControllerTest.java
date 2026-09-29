@@ -16,7 +16,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.mockito.BDDMockito.given;
@@ -54,7 +54,7 @@ class DatabasePingControllerTest {
                 .status(TargetDbStatus.UP)
                 .version("10.11.2-MariaDB")
                 .responseTimeMs(15L)
-                .timestamp(LocalDateTime.now())
+                .timestamp(Instant.now())
                 .errorMessage(null)
                 .build();
 

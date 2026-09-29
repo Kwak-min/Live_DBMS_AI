@@ -17,7 +17,16 @@ docker compose up -d      # 루트에서 실행
 docker compose down -v    # 데이터까지 초기화
 ```
 
-앱 기본값(`application.yml`)이 위 PostgreSQL/Redis 주소와 같아서 별도 환경 변수 없이 연결됩니다. 모니터링 대상으로는 host `127.0.0.1`, port `13306`, 계정 `monitor`/`monitor`를 등록합니다. 이 비밀번호들은 로컬 전용입니다.
+앱 기본값(`application.yml`)이 위 PostgreSQL/Redis 주소와 같아서 DB·Redis 접속용 환경 변수는 따로 필요 없습니다. 모니터링 대상으로는 host `127.0.0.1`, port `13306`, 계정 `monitor`/`monitor`를 등록합니다. 이 비밀번호들은 로컬 전용입니다.
+
+앱 실행에는 B의 비밀값이 필요합니다. 로컬에서 직접 무작위로 만들어 실행 환경에만 넣고 커밋하지 않습니다.
+
+- `SPRING_PROFILES_ACTIVE=local`, `LEGACY_TIME_ZONE=Asia/Seoul`
+- `JWT_SIGNING_KEYS={"local-1":"<base64 32바이트 이상>"}`, `JWT_ACTIVE_KID=local-1`
+- `DB_CONFIG_ENCRYPTION_KEYS={"1":"<base64 정확히 32바이트>"}`, `DB_CONFIG_ACTIVE_KEY_VERSION=1`
+- `TARGET_DB_ALLOWED_CIDRS=127.0.0.1/32,::1/128`, `TARGET_DB_ALLOWED_PORTS=3306,13306`, `AUTH_SECURE_COOKIES=false`
+
+CLI로 인증 API를 호출할 때는 `Origin: http://localhost:5173` 헤더와 `/api/v1/auth/csrf`로 받은 `X-CSRF-Token`이 필요합니다.
 
 ## DB 마이그레이션 (Flyway)
 
