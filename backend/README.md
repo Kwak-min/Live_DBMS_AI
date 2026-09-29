@@ -8,6 +8,26 @@
 
 빌드 기준은 Java 17 / Spring Boot 3.2.3 / Gradle Wrapper 8.5입니다. 구현할 공통 환경·실행 순서는 [저장·운영 규격](../docs/integration-operations.md), 파트 간 통신은 [팀 배포용 규격 v0.2](../docs/integration-contract-draft.md)를 따릅니다. 실제 통합 실행 완료를 의미하지 않습니다.
 
+## 로컬 실행 환경
+
+저장소 루트의 `docker-compose.yml`로 PostgreSQL 16(5432, monitoring_db), Redis 7.4(6379), 테스트 대상 MariaDB 10.11(13306)을 띄웁니다. Docker Desktop이 필요합니다.
+
+```bash
+docker compose up -d      # 루트에서 실행
+docker compose down -v    # 데이터까지 초기화
+```
+
+앱 기본값(`application.yml`)이 위 PostgreSQL/Redis 주소와 같아서 DB·Redis 접속용 환경 변수는 따로 필요 없습니다. 모니터링 대상으로는 host `127.0.0.1`, port `13306`, 계정 `monitor`/`monitor`를 등록합니다. 이 비밀번호들은 로컬 전용입니다.
+
+앱 실행에는 B의 비밀값이 필요합니다. 로컬에서 직접 무작위로 만들어 실행 환경에만 넣고 커밋하지 않습니다.
+
+- `SPRING_PROFILES_ACTIVE=local`, `LEGACY_TIME_ZONE=Asia/Seoul`
+- `JWT_SIGNING_KEYS={"local-1":"<base64 32바이트 이상>"}`, `JWT_ACTIVE_KID=local-1`
+- `DB_CONFIG_ENCRYPTION_KEYS={"1":"<base64 정확히 32바이트>"}`, `DB_CONFIG_ACTIVE_KEY_VERSION=1`
+- `TARGET_DB_ALLOWED_CIDRS=127.0.0.1/32,::1/128`, `TARGET_DB_ALLOWED_PORTS=3306,13306`, `AUTH_SECURE_COOKIES=false`
+
+CLI로 인증 API를 호출할 때는 `Origin: http://localhost:5173` 헤더와 `/api/v1/auth/csrf`로 받은 `X-CSRF-Token`이 필요합니다.
+
 ## DB 마이그레이션 (Flyway)
 
 시스템 DB 스키마는 Flyway로만 변경하며 Hibernate는 `ddl-auto: validate`로 검증만 합니다. 마이그레이션 순서·번호 등록은 A가 관리합니다. V1(A, 기준 스키마) → V2(B) → V3(A) → V4(C). 다른 파트의 migration 파일은 수정하지 않습니다.
