@@ -15,9 +15,13 @@ spring:
       minimum-idle: 2
       connection-timeout: 30000
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
