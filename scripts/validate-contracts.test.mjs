@@ -155,6 +155,27 @@ test("STALE requires an OPEN COLLECTION_STALE CRITICAL incident", async () => {
   );
 });
 
+test("stale boundary scenario must remain at exact threshold equality", async () => {
+  await assertRejected(
+    "stale-boundary-after-threshold",
+    data => {
+      const boundary = scenario(data, "stale-boundary-at");
+      boundary.input.evaluatedAt = "2026-09-28T04:01:01.000Z";
+      boundary.expected.elapsedSeconds = 61;
+    },
+    /stale-boundary-at must evaluate exactly at staleAfterSeconds/,
+  );
+  await assertRejected(
+    "stale-boundary-millisecond-drift",
+    data => {
+      const boundary = scenario(data, "stale-boundary-at");
+      boundary.input.evaluatedAt = "2026-09-28T04:01:00.001Z";
+      boundary.expected.elapsedSeconds = 60.001;
+    },
+    /stale-boundary-at must evaluate exactly at staleAfterSeconds/,
+  );
+});
+
 test("maximum risk sample keeps concurrent stale and failure incidents", async () => {
   await assertRejected(
     "fatal-without-stale",

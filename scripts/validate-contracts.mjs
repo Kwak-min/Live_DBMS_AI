@@ -430,6 +430,8 @@ function validateScenario(data, scenario) {
      const elapsed = (new Date(input.evaluatedAt) - new Date(referenceAt)) / 1000;
      check(elapsed >= 0, `${scenario.id}.evaluatedAt cannot precede its freshness basis`);
      check(Math.abs(elapsed - expected.elapsedSeconds) < 0.001, `${scenario.id}.elapsedSeconds is inconsistent`);
+     check(scenario.id !== "stale-boundary-at" || elapsed === input.staleAfterSeconds,
+       `${scenario.id} must evaluate exactly at staleAfterSeconds`);
      const stale = elapsed >= input.staleAfterSeconds;
      const freshness = stale
        ? "STALE"

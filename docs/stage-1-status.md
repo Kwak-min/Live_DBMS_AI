@@ -36,7 +36,7 @@ VALID: <repository>/docs/contract-examples.json fixtures=18 scenarios=10
 $ node scripts/validate-contracts.mjs docs/contract-examples.json
 VALID: <repository>/docs/contract-examples.json fixtures=18 scenarios=10
 $ node --test scripts/validate-contracts.test.mjs
-tests 29; pass 29; fail 0
+tests 30; pass 30; fail 0
 $ node --check scripts/validate-contracts.mjs
 exit=0
 $ git diff --check -- docs/README.md docs/stage-1-status.md
