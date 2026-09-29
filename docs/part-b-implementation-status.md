@@ -73,7 +73,8 @@ C의 PR #3은 규격·샘플을 `develop`에 반영한 것이며, 아래 실제 
 - [x] GitHub `feature/be-auth`로 최초 Push 및 `develop` 대상 Draft PR #2 생성.
 - [x] 최신 `develop` 위로 로컬 rebase 완료 (`47d67c8`). 설정 충돌 및 중복 정리, 작업 트리 clean 확인.
 - [x] rebase 후 전체 테스트·마이그레이션 테스트 재실행 및 결과 기록 (위 64개 통과).
-- [ ] 재작성된 브랜치를 `--force-with-lease`로 Push하고 PR #2 변경사항 확인. 그 뒤 Draft를 해제해 A에게 리뷰 요청.
+- [x] 재작성된 브랜치를 원격 커밋 `0934d31` 확인 후 명시적 `--force-with-lease`로 Push (`3f30c01`). PR #2의 대상 `develop`, 2개 커밋, 충돌 없음 확인.
+- [x] PR #2 본문을 64개 테스트와 남은 통합 항목으로 갱신하고 Draft를 해제해 Ready for review로 전환. 병합은 A 검토 대기.
 - [ ] PR 검토 과정에서 OpenAPI export·실제 HTTP 응답 대조 결과를 보완
 - [ ] 병합/배포 전 V2 migration backup/rollback 및 실제 DB 암호문 검증
 - [ ] 병합/배포 전 A/C 통합 시나리오 결과를 이 문서에 실행일·SHA·증거 경로와 함께 추가
@@ -87,9 +88,9 @@ Codex 실행 환경의 `JAVA_HOME`은 현재 존재하지 않는 JDK 경로를 �
 ## 3. 현재까지 상황 브리핑
 
 - 작업 브랜치: `feature/be-auth`
-- 2026-09-29 fetch한 `origin/develop`: `c897c87` (A V1·테스트 수정, C 규격 반영). 로컬 rebase 커밋: `47d67c8`; 아직 원격 PR 브랜치에 재Push 전.
+- 2026-09-29 fetch한 `origin/develop`: `c897c87` (A V1·테스트 수정, C 규격 반영). Part B 원격 브랜치 마지막 Push 커밋: `3f30c01`.
 - Part B의 주요 코드·OpenAPI 어노테이션·정적 점검은 완료했지만 OpenAPI 실제 생성/응답 대조, 실제 V2 실행, C lifecycle 연결, 공용 시간 DTO 전환은 아직 미완료다.
 - 현재 A 수집 스케줄러에는 `DatabaseConfig` 전체 저장·위험도 판단·자동 차단 호출이 남아 있어 v0.2 통합 규격과 맞지 않는다. A 소유 변경으로 별도 협의가 필요하다.
-- Draft PR #2에는 Part B 코드, 테스트, 실행 runbook, 이 현황 문서를 포함한다. 이 문서의 최신 수정은 재Push 전까지 PR에 반영되지 않는다.
-- rebase 후 64개 테스트 통과·문서 갱신 결과를 Push한 뒤 A 리뷰를 요청한다. OpenAPI 실제 생성/응답 대조·운영형 DB의 V2·A/C 통합 검증이 끝났다는 뜻으로 병합해서는 안 된다.
+- PR #2는 Ready for review 상태이며, Part B 코드·테스트·실행 runbook·현황 문서를 포함한다. 이 문서의 PR 상태 후속 수정은 다음 Push 전까지 GitHub에 반영되지 않는다.
+- A의 코드 리뷰와 병합 판단을 기다린다. 64개 테스트 통과가 OpenAPI 실제 생성/응답 대조·운영형 DB의 V2·A/C 통합 검증 완료를 뜻하지는 않는다.
 - 공용 인프라가 준비되면 2번의 미진행 체크 항목을 실행 결과와 함께 갱신한다.
