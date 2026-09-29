@@ -51,7 +51,7 @@
 - [ ] 상태/정책/사건 조회·필터, incidents/monitoring_states/risk_rule_states 및 V4 migration.
 - [ ] Redis 그룹·pending reclaim·ACK·DLQ·24시간 안전 trim, 재시작/의존성 장애 복구.
 - [ ] simple broker/STOMP CONNECT·SUBSCRIBE 인증·토큰 만료·세션 종료·payload 변환.
-- [ ] Push/Slack CRUD, URL/endpoint 제한, 발송 작업 중복 방지·cooldown 병합·재시도·수신처 해제, Delivery API.
+- [ ] Push/Slack CRUD, URL/endpoint 제한, 발송 작업 중복 방지·cooldown 병합·`eligibleAt`/`expiresAt` 영속화·재시작 후 만료 준수·재시도·수신처 해제, Delivery API.
 
 ### 프론트 — 공통 로그인·관리·대시보드
 
@@ -100,10 +100,10 @@
 | T12 | 같은 eventId 두 번 + ACK 직전 종료 | OPEN·발송 작업 1건, 재시작 후 pending ACK |
 | T13 | PostgreSQL 성공 뒤 Redis 실패·publisher 재시작 | outbox 보존, 같은 ID로 발행 복구, DB와 event metricId 일치 |
 | T14 | 비율 0.8 이상 t=0/5/10/15, 이후 0.7 t=20/25/30/35 | t=15 WARNING OPEN, t=35 RECOVERED; 경계값 >= 적용 |
-| T15 | WARNING→CRITICAL→WARNING 반복, FATAL 상승 | 동일 incidentId, 단계별 지속/복구 조건과 incidentVersion 증가, 알림 cooldown 병합/FATAL 즉시 |
+| T15 | WARNING→CRITICAL→WARNING 반복, FATAL 상승; cooldown 최대값에서는 t=60에 상승 추가 | 동일 incidentId, 단계별 지속/복구 조건과 incidentVersion 증가. `notificationCooldownSeconds=3600`이면 첫 대기 상승의 `eligibleAt=3600`, `expiresAt=4200`; t=60 이후 최신 비-FATAL 상승 병합은 이 두 시각을 미루지 않으며 FATAL은 대기 작업을 취소/대체하고 즉시 발송 |
 | T16 | 실패 이벤트 지속 vs 수집 프로세스 종료 vs Redis 중단 | CONNECTION_FAILURE와 COLLECTION_STALE 구분, Redis 장애를 수집기 사망으로 단정하지 않음 |
-| T17 | 수동 중단·삭제·정책 변경 중 OPEN | 해당 resolutionReason으로 종료, 정상 복구 알림 없음 |
-| T18 | 오래된 backlog·역순 이벤트·현재보다 낮은 configVersion | 현재 상태/알림을 과거로 되돌리지 않음 |
+| T17 | 수동 중단·삭제·정책 변경 중 OPEN, CONNECTION_FAILURE/COLLECTION_STALE 포함 | 수동 중단·삭제·설정 변경은 해당 resolutionReason으로 종료하고 정상 복구 알림을 보내지 않음. 정책 변경은 configurable metric-rule OPEN만 `POLICY_CHANGED`로 종료하며 CONNECTION_FAILURE·COLLECTION_STALE과 그 타이머는 유지 |
+| T18 | 오래된 backlog·역순/중복 이벤트·현재보다 낮은 configVersion | 무시된 입력은 현재 상태·지속/복구 타이머·알림 `eligibleAt`을 과거로 되돌리거나 초기화하지 않음. 새로 수락한 invalid/gap 관측만 후보·복구 타이머를 초기화 |
 | T19 | 잘못된 schemaVersion/JSON·업무 불변식 오류 | 정해진 DLQ 정책, DLQ 저장 실패 시 ACK 안 함 |
 | T20 | cg:risk와 cg:realtime으로 같은 메트릭 발행 | 각 그룹이 같은 eventId를 각각 처리 |
 | T21 | JWT 없는 CONNECT·임의 wildcard SUBSCRIBE·topic SEND | 인증/인가 거절, 허용 topic만 수신 |
