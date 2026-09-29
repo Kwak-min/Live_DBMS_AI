@@ -159,10 +159,14 @@ class RedisMetricConsumerIntegrationTest {
     }
 
     @Test
-    void malformedRecordGoesToRedactedDlqAndDoesNotBlockFollowingValidRecord() throws Exception {
+    void malformedRecordGoesToSafeDiagnosticDlqAndDoesNotBlockFollowingValidRecord() throws Exception {
         consumer.start();
         String invalid = MetricPayloadParserTest.validPayload()
-                .replace("\"schemaVersion\":1,", "\"schemaVersion\":2,\"password\":\"do-not-leak\",");
+                .replace("\"schemaVersion\":1,",
+                        "\"schemaVersion\":2,\"password\":\"do-not-leak\","
+                                + "\"note\":\"Bearer PROBE_CREDENTIAL_42\",")
+                .replace("\"errorMessage\":null",
+                        "\"errorMessage\":\"password=ERROR_PROBE_CREDENTIAL_42\"");
         redis.xadd(stream, Map.of(PAYLOAD, bytes(invalid)));
         redis.xadd(stream, Map.of(PAYLOAD, validPayload()));
 
@@ -180,9 +184,26 @@ class RedisMetricConsumerIntegrationTest {
         assertThat(body.get("attemptCount").intValue()).isOne();
         assertThat(body.get("failedAt").textValue())
                 .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z");
-        assertThat(body.get("payload").textValue())
-                .contains("[REDACTED]")
-                .doesNotContain("do-not-leak");
+        JsonNode sanitizedPayload = new ObjectMapper().readTree(
+                body.get("payload").textValue());
+        assertThat(sanitizedPayload.path("schemaVersion").intValue()).isEqualTo(2);
+        assertThat(sanitizedPayload.path("eventId").textValue())
+                .isEqualTo("7f6a1c08-9ef4-45bd-bc2e-5b2d1c1a2f11");
+        assertThat(sanitizedPayload.path("databaseConfigId").longValue()).isEqualTo(12);
+        assertThat(sanitizedPayload.path("eventType").textValue())
+                .isEqualTo("MetricCollectedEvent");
+        assertThat(sanitizedPayload.path("publishedAt").textValue())
+                .isEqualTo("2026-09-28T03:00:20.050Z");
+        assertThat(sanitizedPayload.has("databaseName")).isFalse();
+        assertThat(sanitizedPayload.has("errorMessage")).isFalse();
+        assertThat(sanitizedPayload.has("note")).isFalse();
+        assertThat(sanitizedPayload.has("cpuUsage")).isFalse();
+        assertThat(sanitizedPayload.has("unavailableMetrics")).isFalse();
+        assertThat(sanitizedPayload.has("password")).isFalse();
+        assertThat(sanitizedPayload.toString()).doesNotContain(
+                "do-not-leak",
+                "PROBE_CREDENTIAL_42",
+                "ERROR_PROBE_CREDENTIAL_42");
     }
 
     @Test

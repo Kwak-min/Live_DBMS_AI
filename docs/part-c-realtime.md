@@ -60,9 +60,13 @@ Redis stream in consumer group `cg:realtime`. It parses the checked v1
 `MetricCollectedEvent`, records `(stream, consumer_group, event_id)` in the
 A-owned `processed_events` table, and hands an accepted metric to the STOMP
 adapter. Duplicate Redis records with the same event ID are acknowledged after
-the database dedup decision and do not publish a second metric frame. Invalid
-records are sanitized into `stream:dead-letter`; the sanitized payload must not
-contain credentials or other secret input. `MetricUpdated` and subscription
+the database dedup decision and do not publish a second metric frame.
+Invalid records are sanitized into `stream:dead-letter`. For valid JSON objects,
+the dead-letter payload retains only canonical event metadata: schema/version,
+identifiers, times, and recognized status/error enums. Free text including
+`databaseName` and `errorMessage`, metric values, unknown fields, arrays, and
+nested objects are omitted. Malformed or non-object input uses a constant marker;
+all markers and projections are capped at 64 KiB. `MetricUpdated` and subscription
 `Error` envelopes use UTC timestamps with exactly three fractional digits
 (`yyyy-MM-dd'T'HH:mm:ss.SSSX`); dead-letter `failedAt` uses the same format.
 
