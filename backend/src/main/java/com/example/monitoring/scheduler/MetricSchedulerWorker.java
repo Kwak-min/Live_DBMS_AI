@@ -14,6 +14,8 @@ import com.example.monitoring.repository.DatabaseConfigRepository;
 import com.example.monitoring.repository.MetricDataRepository;
 import com.example.monitoring.service.ProjectIsolationService;
 import com.example.monitoring.service.RiskAssessmentEngine;
+import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.port.TargetProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -33,6 +35,7 @@ import java.util.concurrent.Executors;
 public class MetricSchedulerWorker {
 
     private final DatabaseConfigRepository databaseConfigRepository;
+    private final TargetProvider targetProvider;
     private final MetricDataRepository metricDataRepository;
     private final DbMetricsCollector dbMetricsCollector;
     private final RedisStreamPublisher redisStreamPublisher;
@@ -44,7 +47,7 @@ public class MetricSchedulerWorker {
 
     @Scheduled(fixedRateString = "${app.collector.fixed-rate-ms:5000}")
     public void executeCollectionCycle() {
-        List<DatabaseConfig> targetDatabases = databaseConfigRepository.findByEnabledTrue();
+        List<CollectorTarget> targetDatabases = targetProvider.listEnabled();
         if (targetDatabases.isEmpty()) {
             log.trace("No active database configurations found for metric collection.");
             return;
@@ -53,17 +56,29 @@ public class MetricSchedulerWorker {
         log.debug("Starting metric collection cycle for {} target database(s).", targetDatabases.size());
 
         List<CompletableFuture<Void>> futures = targetDatabases.stream()
-                .map(config -> CompletableFuture.runAsync(() -> processSingleTarget(config), collectionExecutor))
+                .map(target -> CompletableFuture.runAsync(() -> processSingleTarget(target), collectionExecutor))
                 .toList();
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
-    private void processSingleTarget(DatabaseConfig config) {
+    private void processSingleTarget(CollectorTarget target) {
         LocalDateTime attemptTime = LocalDateTime.now();
         try {
+            DatabaseConfig config = databaseConfigRepository.findByIdAndDeletedAtIsNull(target.id()).orElse(null);
+            if (config == null || !config.getEnabled() || !config.getConfigVersion().equals(target.configVersion())) {
+                return;
+            }
             // 1. 메트릭 수집
-            MetricData metricData = dbMetricsCollector.collectMetrics(config);
+            MetricData metricData = dbMetricsCollector.collectMetrics(config, target);
+
+            DatabaseConfig latest = databaseConfigRepository.findByIdAndDeletedAtIsNull(target.id()).orElse(null);
+            if (latest == null || !latest.getEnabled() || !latest.getConfigVersion().equals(target.configVersion())) {
+                log.info("Discarding collection result for stale configVersion. dbId={}, collectedVersion={}",
+                        target.id(), target.configVersion());
+                return;
+            }
+            config = latest;
 
             // 2. DatabaseConfig 상태 업데이트
             if (metricData.getCollectionStatus() == CollectionStatus.SUCCESS) {
@@ -118,7 +133,7 @@ public class MetricSchedulerWorker {
             }
 
         } catch (Exception e) {
-            log.error("Unhandled exception during collection execution for dbId: {}", config.getId(), e);
+            log.error("Unhandled exception during collection execution for dbId: {}", target.id(), e);
         }
     }
 }

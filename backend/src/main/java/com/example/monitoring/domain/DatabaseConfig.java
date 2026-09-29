@@ -26,11 +26,29 @@ public class DatabaseConfig {
     @Column(nullable = false)
     private Integer port;
 
-    @Column(nullable = false, length = 100)
-    private String username;
+    private Integer usernameKeyVersion;
 
-    @Column(nullable = false, length = 255)
-    private String password; // Note: Encrypted in production by Part B
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @Column(columnDefinition = "bytea")
+    private byte[] usernameNonce;
+
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @Column(columnDefinition = "bytea")
+    private byte[] usernameCiphertext;
+
+    private Integer passwordKeyVersion;
+
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @Column(columnDefinition = "bytea")
+    private byte[] passwordNonce;
+
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @Column(columnDefinition = "bytea")
+    private byte[] passwordCiphertext;
 
     @Column(length = 100)
     private String databaseName;
@@ -48,7 +66,15 @@ public class DatabaseConfig {
     @Builder.Default
     private Boolean enabled = true;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private Long configVersion = 1L;
+
+    private LocalDateTime deletedAt;
+
     private LocalDateTime lastCheckedAt;
+
+    private LocalDateTime lastSuccessAt;
 
     private String lastErrorMessage;
 
@@ -61,10 +87,45 @@ public class DatabaseConfig {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (configVersion == null) {
+            configVersion = 1L;
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public void storeEncryptedUsername(Integer keyVersion, byte[] nonce, byte[] ciphertext) {
+        this.usernameKeyVersion = keyVersion;
+        this.usernameNonce = nonce.clone();
+        this.usernameCiphertext = ciphertext.clone();
+    }
+
+    public void storeEncryptedPassword(Integer keyVersion, byte[] nonce, byte[] ciphertext) {
+        this.passwordKeyVersion = keyVersion;
+        this.passwordNonce = nonce.clone();
+        this.passwordCiphertext = ciphertext.clone();
+    }
+
+    public byte[] getUsernameNonce() {
+        return cloneOrNull(usernameNonce);
+    }
+
+    public byte[] getUsernameCiphertext() {
+        return cloneOrNull(usernameCiphertext);
+    }
+
+    public byte[] getPasswordNonce() {
+        return cloneOrNull(passwordNonce);
+    }
+
+    public byte[] getPasswordCiphertext() {
+        return cloneOrNull(passwordCiphertext);
+    }
+
+    private byte[] cloneOrNull(byte[] value) {
+        return value == null ? null : value.clone();
     }
 }

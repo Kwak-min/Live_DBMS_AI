@@ -3,8 +3,10 @@ package com.example.monitoring.collector;
 import com.example.monitoring.domain.CollectionStatus;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.MetricData;
+import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.security.TargetConnectionFactory;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.sql.*;
@@ -15,10 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class MariaDbMetricsCollector implements DbMetricsCollector {
-
-    @Value("${app.collector.connection-timeout-seconds:5}")
-    private int connectionTimeoutSeconds;
+    private final TargetConnectionFactory connectionFactory;
 
     // Memory cache for calculating differential QPS (dbId -> LastQueryState)
     private final Map<Long, QueryState> lastQueryStates = new ConcurrentHashMap<>();
@@ -34,23 +35,16 @@ public class MariaDbMetricsCollector implements DbMetricsCollector {
     }
 
     @Override
-    public MetricData collectMetrics(DatabaseConfig config) {
+    public MetricData collectMetrics(DatabaseConfig config, CollectorTarget target) {
         long startTime = System.currentTimeMillis();
         LocalDateTime collectionTimestamp = LocalDateTime.now();
-
-        String jdbcUrl = String.format("jdbc:mariadb://%s:%d/%s?connectTimeout=%d&socketTimeout=%d",
-                config.getHost(),
-                config.getPort(),
-                config.getDatabaseName() != null ? config.getDatabaseName() : "",
-                connectionTimeoutSeconds * 1000,
-                connectionTimeoutSeconds * 1000);
 
         MetricData metricData = MetricData.builder()
                 .databaseConfig(config)
                 .timestamp(collectionTimestamp)
                 .build();
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, config.getUsername(), config.getPassword())) {
+        try (Connection conn = connectionFactory.open(target)) {
             long pingMs = System.currentTimeMillis() - startTime;
             metricData.setResponseTimeMs(pingMs);
 
@@ -110,12 +104,11 @@ public class MariaDbMetricsCollector implements DbMetricsCollector {
 
         } catch (SQLException e) {
             long durationMs = System.currentTimeMillis() - startTime;
-            log.warn("Failed to collect metrics from MariaDB target [{}:{}] - Error: {}",
-                    config.getHost(), config.getPort(), e.getMessage());
+            log.warn("Failed to collect metrics. databaseConfigId={}, sqlState={}", target.id(), e.getSQLState());
 
             metricData.setResponseTimeMs(durationMs);
             metricData.setCollectionStatus(CollectionStatus.CONNECTION_FAILED);
-            metricData.setErrorMessage(e.getMessage());
+            metricData.setErrorMessage("대상 DB 연결 또는 조회에 실패했습니다.");
             
             // Critical rule: Set metrics to null (NOT 0!) on collection failure
             metricData.setActiveConnections(null);
@@ -127,9 +120,10 @@ public class MariaDbMetricsCollector implements DbMetricsCollector {
             metricData.setCpuUsage(null);
             metricData.setMemoryUsage(null);
         } catch (Exception e) {
-            log.error("Unexpected error during metric collection for dbId: {}", config.getId(), e);
+            log.error("Unexpected metric collection failure. databaseConfigId={}, exceptionType={}",
+                    config.getId(), e.getClass().getSimpleName());
             metricData.setCollectionStatus(CollectionStatus.PARTIAL_FAILURE);
-            metricData.setErrorMessage("Unexpected failure: " + e.getMessage());
+            metricData.setErrorMessage("대상 DB 수집 중 내부 오류가 발생했습니다.");
         }
 
         return metricData;

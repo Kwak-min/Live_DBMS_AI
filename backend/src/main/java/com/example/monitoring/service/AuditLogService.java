@@ -7,7 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -18,14 +19,21 @@ public class AuditLogService {
 
     @Transactional
     public AuditLog logAccess(String clientIp, String httpMethod, String requestUri, String userAgent, Integer httpStatus, Long executionTimeMs) {
+        return logAccess(null, clientIp, httpMethod, requestUri, httpStatus, executionTimeMs, UUID.randomUUID());
+    }
+
+    @Transactional
+    public AuditLog logAccess(Long actorId, String clientIp, String method, String path,
+                              Integer statusCode, Long durationMs, UUID requestId) {
         AuditLog auditLog = AuditLog.builder()
+                .actorId(actorId)
                 .clientIp(clientIp)
-                .httpMethod(httpMethod)
-                .requestUri(requestUri)
-                .userAgent(userAgent != null && userAgent.length() > 500 ? userAgent.substring(0, 500) : userAgent)
-                .httpStatus(httpStatus)
-                .executionTimeMs(executionTimeMs)
-                .timestamp(LocalDateTime.now())
+                .method(method)
+                .path(path)
+                .statusCode(statusCode)
+                .durationMs(durationMs)
+                .occurredAt(Instant.now())
+                .requestId(requestId)
                 .build();
 
         try {
