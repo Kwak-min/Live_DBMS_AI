@@ -14,4 +14,4 @@
 
 - 새(빈) DB: 애플리케이션 기동 시 자동 적용됩니다.
 - 예전 `ddl-auto: update`로 테이블이 이미 만들어진 로컬 DB: `baseline-on-migrate`가 꺼져 있어 기동이 실패합니다(의도된 동작). 테스트 데이터만 있다면 DB를 새로 만드는 것이 가장 간단합니다. 데이터를 보존해야 하면 백업 후 스키마가 V1과 같은지 확인하고 `flyway baseline -baselineVersion=1`을 명시적으로 실행합니다.
-- `MigrationV1SchemaTest`는 내장 PostgreSQL 16에서 V1과 기존 엔티티의 Hibernate 생성 스키마(컬럼·제약·인덱스)가 같은지, V1 위에서 `validate`가 통과하는지 검증합니다.
+- `MigrationSchemaTest`는 내장 PostgreSQL 16에서 전체 migration을 적용한 뒤 모든 엔티티가 `validate`를 통과하는지, V1 기존 데이터가 최신 버전까지 이전되는지 검증합니다. 새 migration이나 엔티티를 추가하면 이 테스트가 통과해야 합니다. (V1이 기준 엔티티의 Hibernate 생성 스키마와 컬럼·제약·인덱스까지 같다는 점은 PR #4에서 1회 검증했습니다.)
