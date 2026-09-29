@@ -1,9 +1,9 @@
 package com.example.monitoring.migration;
 
+import com.example.monitoring.support.EmbeddedPostgresSupport;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.flywaydb.core.Flyway;
 import org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,8 +13,8 @@ import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Base64;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,26 +28,11 @@ class MigrationSchemaTest {
 
     private static final String ENTITY_PACKAGE = "com.example.monitoring";
 
-    /** V2(B)가 요구하는 migration 입력. 테스트 전용 값이며 실제 키가 아니다. */
-    private static final Map<String, String> MIGRATION_PROPERTIES = Map.of(
-            "DB_CONFIG_ACTIVE_KEY_VERSION", "1",
-            "DB_CONFIG_ENCRYPTION_KEYS", "{\"1\":\"" + Base64.getEncoder().encodeToString(new byte[32]) + "\"}",
-            "LEGACY_TIME_ZONE", "Asia/Seoul");
-
     private static EmbeddedPostgres postgres;
 
     @BeforeAll
-    static void startPostgres() throws Exception {
-        MIGRATION_PROPERTIES.forEach(System::setProperty);
-        postgres = EmbeddedPostgres.start();
-    }
-
-    @AfterAll
-    static void stopPostgres() throws Exception {
-        MIGRATION_PROPERTIES.keySet().forEach(System::clearProperty);
-        if (postgres != null) {
-            postgres.close();
-        }
+    static void startPostgres() {
+        postgres = EmbeddedPostgresSupport.postgres();
     }
 
     @Test
@@ -76,13 +61,29 @@ class MigrationSchemaTest {
                     """);
             statement.execute("""
                     INSERT INTO metric_data (collection_status, created_at, database_config_id, timestamp)
-                    VALUES ('SUCCESS', now(), 1, now())
+                    VALUES ('SUCCESS', '2026-09-28 12:00:00', 1, '2026-09-28 12:00:00')
                     """);
         }
 
         flyway(dataSource).migrate();
 
         assertThatCode(() -> validateEntities(dataSource)).doesNotThrowAnyException();
+        // V3: LEGACY_TIME_ZONE(Asia/Seoul) 기준 로컬 시각을 UTC로 변환하고 v1 필드를 채운다.
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet row = statement.executeQuery("""
+                     SELECT to_char(timestamp AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS utc_time,
+                            config_version, collection_attempt_time = timestamp AS attempt_matches,
+                            last_success_at = timestamp AS success_matches, unavailable_metrics::text AS unavailable
+                     FROM metric_data
+                     """)) {
+            assertThat(row.next()).isTrue();
+            assertThat(row.getString("utc_time")).isEqualTo("2026-09-28 03:00:00");
+            assertThat(row.getLong("config_version")).isEqualTo(1L);
+            assertThat(row.getBoolean("attempt_matches")).isTrue();
+            assertThat(row.getBoolean("success_matches")).isTrue();
+            assertThat(row.getString("unavailable")).isEqualTo("{}");
+        }
     }
 
     private static Flyway flyway(DataSource dataSource) {

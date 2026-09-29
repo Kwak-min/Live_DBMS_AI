@@ -1,10 +1,9 @@
 package com.example.monitoring.common.outbox;
 
 import com.example.monitoring.common.config.UtcInstantJacksonConfig;
+import com.example.monitoring.support.EmbeddedPostgresSupport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,8 +12,6 @@ import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,10 +19,7 @@ import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.sql.DataSource;
-import java.io.IOException;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,26 +30,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ImportAutoConfiguration({JacksonAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
-@Import({OutboxWriter.class, ProcessedEventStore.class, UtcInstantJacksonConfig.class})
+@Import({EmbeddedPostgresSupport.Config.class, OutboxWriter.class, ProcessedEventStore.class,
+        UtcInstantJacksonConfig.class})
 class OutboxWriterIntegrationTest {
 
     private static final String UTC_MILLIS_PATTERN = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z";
-
-    /** V2(B) migration 입력. 테스트 전용 값이며 실제 키가 아니다. */
-    private static final Map<String, String> MIGRATION_PROPERTIES = Map.of(
-            "DB_CONFIG_ACTIVE_KEY_VERSION", "1",
-            "DB_CONFIG_ENCRYPTION_KEYS", "{\"1\":\"" + Base64.getEncoder().encodeToString(new byte[32]) + "\"}",
-            "LEGACY_TIME_ZONE", "Asia/Seoul");
-
-    private static final EmbeddedPostgres POSTGRES = startPostgres();
-
-    @TestConfiguration
-    static class EmbeddedPostgresConfig {
-        @Bean
-        DataSource dataSource() {
-            return POSTGRES.getPostgresDatabase();
-        }
-    }
 
     @Autowired
     private OutboxWriter outboxWriter;
@@ -71,21 +50,6 @@ class OutboxWriterIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    private static EmbeddedPostgres startPostgres() {
-        MIGRATION_PROPERTIES.forEach(System::setProperty);
-        try {
-            return EmbeddedPostgres.start();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    @AfterAll
-    static void stopPostgres() throws IOException {
-        MIGRATION_PROPERTIES.keySet().forEach(System::clearProperty);
-        POSTGRES.close();
-    }
 
     record SamplePayload(long metricId, long databaseConfigId, Instant timestamp, Double qps) {
     }

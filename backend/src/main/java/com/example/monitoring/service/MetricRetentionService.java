@@ -7,7 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Slf4j
 @Service
@@ -27,7 +28,7 @@ public class MetricRetentionService {
      */
     @Transactional
     public int purgeExpiredMetrics() {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
         int deleted = metricDataRepository.deleteByTimestampBefore(cutoff);
         if (deleted > 0) {
             log.info("Purged {} metric snapshot(s) older than {} (retention: {} days).", deleted, cutoff, retentionDays);

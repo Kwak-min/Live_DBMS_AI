@@ -16,7 +16,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -53,7 +53,7 @@ class MetricControllerTest {
         MetricResponseDto dto = MetricResponseDto.builder()
                 .id(100L)
                 .databaseConfigId(dbId)
-                .timestamp(LocalDateTime.now())
+                .timestamp(Instant.now())
                 .activeConnections(15L)
                 .maxConnections(100L)
                 .qps(250.5)
@@ -80,7 +80,7 @@ class MetricControllerTest {
         MetricResponseDto dto = MetricResponseDto.builder()
                 .id(101L)
                 .databaseConfigId(dbId)
-                .timestamp(LocalDateTime.now())
+                .timestamp(Instant.now())
                 .activeConnections(10L)
                 .collectionStatus(CollectionStatus.SUCCESS)
                 .build();
