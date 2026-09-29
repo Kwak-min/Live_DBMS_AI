@@ -103,7 +103,7 @@ class OutboxWriterIntegrationTest {
                 Map.of("eventId", "other")))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> outboxWriter.append(UUID.randomUUID(), OutboxEventType.INCIDENT_CREATED,
-                Map.of("message", "x".repeat(OutboxWriter.MAX_PAYLOAD_BYTES))))
+                Map.of("message", "x".repeat(EventJson.MAX_PAYLOAD_BYTES))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> outboxWriter.append(UUID.randomUUID(), OutboxEventType.INCIDENT_CREATED, "text"))
                 .isInstanceOf(IllegalArgumentException.class);

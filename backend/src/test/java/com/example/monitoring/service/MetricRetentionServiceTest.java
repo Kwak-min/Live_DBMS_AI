@@ -8,17 +8,31 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.stream.LongStream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class MetricRetentionServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-09-29T03:00:00Z");
 
     @Mock
     private MetricDataRepository metricDataRepository;
@@ -27,34 +41,45 @@ class MetricRetentionServiceTest {
 
     @BeforeEach
     void setUp() {
-        retentionService = new MetricRetentionService(metricDataRepository);
+        TransactionTemplate transactionTemplate = new TransactionTemplate(mock(PlatformTransactionManager.class));
+        retentionService = new MetricRetentionService(metricDataRepository, transactionTemplate);
         ReflectionTestUtils.setField(retentionService, "retentionDays", 30);
+        ReflectionTestUtils.setField(retentionService, "clock", Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
-    @DisplayName("Deletes metrics older than the configured retention window and returns the deleted count")
-    void purgeExpiredMetrics_deletesOlderThanCutoff() {
-        given(metricDataRepository.deleteByTimestampBefore(any(Instant.class))).willReturn(5);
+    @DisplayName("Deletes snapshots older than 30 days (UTC) in batches until a short batch is returned")
+    void purgeDeletesInBatches() {
+        List<Long> fullBatch = LongStream.rangeClosed(1, MetricRetentionService.BATCH_SIZE).boxed().toList();
+        List<Long> lastBatch = List.of(2001L, 2002L);
+        given(metricDataRepository.findIdsOlderThan(any(Instant.class), any(Pageable.class)))
+                .willReturn(fullBatch, lastBatch);
 
         int deleted = retentionService.purgeExpiredMetrics();
 
-        assertEquals(5, deleted);
-
-        ArgumentCaptor<Instant> cutoffCaptor = ArgumentCaptor.forClass(Instant.class);
-        verify(metricDataRepository).deleteByTimestampBefore(cutoffCaptor.capture());
-
-        Instant expectedCutoff = Instant.now().minus(30, java.time.temporal.ChronoUnit.DAYS);
-        long secondsDiff = Math.abs(java.time.Duration.between(expectedCutoff, cutoffCaptor.getValue()).getSeconds());
-        assertEquals(true, secondsDiff < 5, "Cutoff should be approximately 30 days before now");
+        assertThat(deleted).isEqualTo(MetricRetentionService.BATCH_SIZE + 2);
+        ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
+        verify(metricDataRepository, times(2)).findIdsOlderThan(cutoff.capture(), any(Pageable.class));
+        assertThat(cutoff.getAllValues()).containsOnly(Instant.parse("2026-08-30T03:00:00Z"));
+        verify(metricDataRepository).deleteAllByIdInBatch(fullBatch);
+        verify(metricDataRepository).deleteAllByIdInBatch(lastBatch);
     }
 
     @Test
-    @DisplayName("Returns zero when no metrics are old enough to purge")
-    void purgeExpiredMetrics_noExpiredData_returnsZero() {
-        given(metricDataRepository.deleteByTimestampBefore(any(Instant.class))).willReturn(0);
+    @DisplayName("Returns zero and deletes nothing when no snapshot is old enough")
+    void purgeWithNothingExpired() {
+        given(metricDataRepository.findIdsOlderThan(any(Instant.class), any(Pageable.class))).willReturn(List.of());
 
-        int deleted = retentionService.purgeExpiredMetrics();
+        assertThat(retentionService.purgeExpiredMetrics()).isZero();
+        verify(metricDataRepository, never()).deleteAllByIdInBatch(eq(List.of()));
+    }
 
-        assertEquals(0, deleted);
+    @Test
+    @DisplayName("Retention days outside 1~365 fail at startup")
+    void retentionDaysRange() {
+        ReflectionTestUtils.setField(retentionService, "retentionDays", 0);
+        assertThatThrownBy(retentionService::validateRetentionDays).isInstanceOf(IllegalStateException.class);
+        ReflectionTestUtils.setField(retentionService, "retentionDays", 366);
+        assertThatThrownBy(retentionService::validateRetentionDays).isInstanceOf(IllegalStateException.class);
     }
 }

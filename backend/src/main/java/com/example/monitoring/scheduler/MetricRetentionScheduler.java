@@ -15,7 +15,7 @@ public class MetricRetentionScheduler {
 
     private final MetricRetentionService metricRetentionService;
 
-    @Scheduled(cron = "${app.metrics.retention-cleanup-cron:0 0 3 * * *}")
+    @Scheduled(cron = "${app.metrics.retention-cleanup-cron:0 0 3 * * *}", zone = "UTC")
     public void purgeExpiredMetrics() {
         try {
             metricRetentionService.purgeExpiredMetrics();

@@ -1,21 +1,15 @@
 package com.example.monitoring.common.outbox;
 
-import com.example.monitoring.common.config.UtcInstantJacksonConfig;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -26,10 +20,6 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class OutboxWriter {
-
-    static final int SCHEMA_VERSION = 1;
-    static final int MAX_PAYLOAD_BYTES = 64 * 1024;
-    private static final Set<String> RESERVED_FIELDS = Set.of("schemaVersion", "eventId", "eventType", "publishedAt");
 
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
@@ -62,7 +52,7 @@ public class OutboxWriter {
             throw new IllegalArgumentException("eventId, type and payload are required");
         }
         Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
-        String json = toEventJson(eventId, type, now, payload);
+        String json = EventJson.build(objectMapper, eventId, type.wireName(), now, payload);
 
         outboxEventRepository.save(OutboxEvent.builder()
                 .eventId(eventId)
@@ -74,36 +64,6 @@ public class OutboxWriter {
                 .attempts(0)
                 .nextAttemptAt(now)
                 .build());
-    }
-
-    private String toEventJson(UUID eventId, OutboxEventType type, Instant publishedAt, Object payload) {
-        JsonNode body = objectMapper.valueToTree(payload);
-        if (!body.isObject()) {
-            throw new IllegalArgumentException("Outbox payload must serialize to a JSON object: " + type.wireName());
-        }
-        body.fieldNames().forEachRemaining(field -> {
-            if (RESERVED_FIELDS.contains(field)) {
-                throw new IllegalArgumentException("Outbox payload must not contain common field '" + field + "'");
-            }
-        });
-
-        ObjectNode event = objectMapper.createObjectNode();
-        event.put("schemaVersion", SCHEMA_VERSION);
-        event.put("eventId", eventId.toString());
-        event.put("eventType", type.wireName());
-        event.put("publishedAt", UtcInstantJacksonConfig.format(publishedAt));
-        event.setAll((ObjectNode) body);
-
-        String json;
-        try {
-            json = objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Failed to serialize outbox payload: " + type.wireName(), e);
-        }
-        if (json.getBytes(StandardCharsets.UTF_8).length > MAX_PAYLOAD_BYTES) {
-            throw new IllegalArgumentException("Outbox payload exceeds 64KiB: " + type.wireName());
-        }
-        return json;
     }
 
     private String streamKey(OutboxEventType type) {

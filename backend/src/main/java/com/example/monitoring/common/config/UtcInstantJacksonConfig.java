@@ -27,7 +27,7 @@ public class UtcInstantJacksonConfig {
     }
 
     @Bean
-    Jackson2ObjectMapperBuilderCustomizer utcInstantCustomizer() {
+    public Jackson2ObjectMapperBuilderCustomizer utcInstantCustomizer() {
         return builder -> builder.serializerByType(Instant.class, new JsonSerializer<Instant>() {
             @Override
             public void serialize(Instant value, JsonGenerator generator, SerializerProvider serializers)

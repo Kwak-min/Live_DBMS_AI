@@ -85,11 +85,37 @@ class MetricControllerTest {
                 .collectionStatus(CollectionStatus.SUCCESS)
                 .build();
 
-        given(metricService.getRecentMetrics(dbId, 50)).willReturn(List.of(dto));
+        given(metricService.getRecentMetrics(dbId, null)).willReturn(List.of(dto));
 
         mockMvc.perform(get("/api/v1/metrics/{dbId}/recent", dbId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].databaseConfigId").value(dbId))
                 .andExpect(jsonPath("$[0].activeConnections").value(10));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/metrics/{dbId}/latest returns 204 without body when no snapshot exists yet")
+    void getLatestMetric_noSnapshot_returns204() throws Exception {
+        given(metricService.getLatestMetric(1L)).willReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/metrics/{dbId}/latest", 1L))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/metrics/{dbId}/history passes the raw UTC range and limit to the service")
+    void getHistory_passesRange() throws Exception {
+        given(metricService.getMetricHistory(1L, "2026-09-28T03:00:00.000Z", "2026-09-28T04:00:00.000Z"))
+                .willReturn(List.of());
+        given(metricService.getRecentMetrics(1L, 10)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/metrics/{dbId}/history", 1L)
+                        .param("start", "2026-09-28T03:00:00.000Z")
+                        .param("end", "2026-09-28T04:00:00.000Z"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+        mockMvc.perform(get("/api/v1/metrics/{dbId}/recent", 1L).param("limit", "10"))
+                .andExpect(status().isOk());
     }
 }
