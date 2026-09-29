@@ -119,7 +119,7 @@ test("minimum cooldown below 60 seconds is rejected", async () => {
 });
 
 function makeAcceptedNonStale(data, freshness) {
-  const boundary = scenario(data, "stale-boundary-before");
+  const boundary = scenario(data, "accepted-observation-fresh");
   boundary.input.latestAcceptedCollectionAttemptAt =
     "2026-09-28T04:00:30.000Z";
   boundary.expected.elapsedSeconds = 29.999;
@@ -162,7 +162,7 @@ test("maximum risk sample keeps concurrent stale and failure incidents", async (
       const boundary = scenario(data, "stale-preserves-fatal-risk");
       boundary.input.openIncidentRefs = ["connectionFailureIncidentEvent"];
     },
-    /STALE requires an OPEN COLLECTION_STALE CRITICAL incident/,
+    /must include an OPEN COLLECTION_STALE CRITICAL incident/,
   );
 });
 
@@ -186,6 +186,64 @@ test("accepted partial failure uses the exact reset action", async () => {
         .expected.timerAction = "RESET_NOTHING";
     },
     /RESET_CANDIDATE_AND_RECOVERY_TIMERS/,
+  );
+});
+
+test("accepted partial failure cannot bypass reset validation with an unknown reason", async () => {
+  await assertRejected(
+    "unknown-reason-reset-nothing",
+    data => {
+      const partial = scenario(data, "accepted-partial-failure-resets-timers");
+      partial.expected.reason = "UNKNOWN";
+      partial.expected.timerAction = "RESET_NOTHING";
+    },
+    /expected\.reason must be ACCEPTED_INVALID_OBSERVATION/,
+  );
+});
+
+test("required scenario IDs cannot be rebound to another valid scenario kind", async () => {
+  await assertRejected(
+    "required-id-wrong-kind",
+    data => {
+      const replacement = structuredClone(scenario(data, "stale-boundary-before"));
+      replacement.id = "duplicate-event-id";
+      data.scenarios = data.scenarios.map(item =>
+        item.id === "duplicate-event-id" ? replacement : item,
+      );
+    },
+    /duplicate-event-id must have kind event-sequence/,
+  );
+});
+
+test("state-boundary IDs cannot be rebound to another valid state body", async () => {
+  await assertRejected(
+    "state-id-wrong-body",
+    data => {
+      const replacement = structuredClone(scenario(data, "stale-boundary-at"));
+      replacement.id = "stale-boundary-before";
+      data.scenarios = data.scenarios.map(item =>
+        item.id === "stale-boundary-before" ? replacement : item,
+      );
+    },
+    /stale-boundary-before state-boundary expectation does not match required scenario/,
+  );
+});
+
+test("maximum cooldown scenario cannot be reduced below 3600 seconds", async () => {
+  await assertRejected(
+    "max-cooldown-3599",
+    data => {
+      const cooldown = scenario(data, "cooldown-3600-keeps-eligibility");
+      cooldown.input.cooldownSeconds = 3599;
+      cooldown.input.queuedJob.eligibleAt = "2026-09-28T03:59:59.000Z";
+      cooldown.input.queuedJob.expiresAt = "2026-09-28T04:09:59.000Z";
+      cooldown.expected.eligibleAt = "2026-09-28T03:59:59.000Z";
+      cooldown.expected.expiresAt = "2026-09-28T04:09:59.000Z";
+      cooldown.expected.atEligibility.observedAt = "2026-09-28T03:59:59.000Z";
+      cooldown.expected.atExpiry.observedAt = "2026-09-28T04:09:59.000Z";
+      cooldown.expected.mergedEscalationEligibleAt = "2026-09-28T03:59:59.000Z";
+    },
+    /cooldown-3600-keeps-eligibility cooldownSeconds must be 3600/,
   );
 });
 

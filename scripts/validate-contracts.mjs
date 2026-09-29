@@ -64,6 +64,18 @@ const requiredScenarioIds = new Set([
   "policy-change-metric-only",
   "cooldown-3600-keeps-eligibility",
 ]);
+const requiredScenarioContracts = new Map([
+  ["duplicate-event-id", { kind: "event-sequence", reason: "DUPLICATE_EVENT_ID" }],
+  ["late-out-of-order-event", { kind: "event-sequence", reason: "LATE_OR_OUT_OF_ORDER" }],
+  ["old-config-event", { kind: "event-sequence", reason: "OLD_CONFIG_VERSION" }],
+  ["accepted-partial-failure-resets-timers", { kind: "event-sequence", reason: "ACCEPTED_INVALID_OBSERVATION" }],
+  ["stale-boundary-before", { kind: "state-boundary", state: { accepted: false, stale: false, dataFreshness: "NO_DATA", basis: "ACTIVATION_BEFORE_FIRST_ACCEPTED_OBSERVATION" } }],
+  ["accepted-observation-fresh", { kind: "state-boundary", state: { accepted: true, stale: false, dataFreshness: "FRESH", basis: "LAST_ACCEPTED_COLLECTION_ATTEMPT" } }],
+  ["stale-boundary-at", { kind: "state-boundary", state: { accepted: false, stale: true, dataFreshness: "STALE", basis: "ACTIVATION_BEFORE_FIRST_ACCEPTED_OBSERVATION" } }],
+  ["stale-preserves-fatal-risk", { kind: "state-boundary", state: { accepted: true, stale: true, dataFreshness: "STALE", basis: "LAST_ACCEPTED_COLLECTION_ATTEMPT", incidents: [{ ruleId: "CONNECTION_FAILURE", severity: "FATAL" }, { ruleId: "COLLECTION_STALE", severity: "CRITICAL" }] } }],
+  ["policy-change-metric-only", { kind: "policy-change" }],
+  ["cooldown-3600-keeps-eligibility", { kind: "notification-cooldown", cooldownSeconds: 3600 }],
+]);
 const statusFields = [
   "databaseConfigId",
   "configVersion",
@@ -313,6 +325,46 @@ function validateMappings(data) {
 }
 
 function indexesMatch(actual, indexes, input, label) { check(Array.isArray(actual), `${label} must be an array`); const refs = (actual ?? []).map(index => input[index]?.fixtureRef); check(refs.every(Boolean), `${label} contains an invalid input index`); return refs; }
+function validateScenarioContract(data, scenario) {
+  const contract = requiredScenarioContracts.get(scenario.id);
+  if (!contract) return true;
+  if (scenario.kind !== contract.kind) {
+    check(false, `${scenario.id} must have kind ${contract.kind}`);
+    return false;
+  }
+  if (contract.reason !== undefined && scenario.expected?.reason !== contract.reason) {
+    check(false, `${scenario.id}.expected.reason must be ${contract.reason}`);
+    return false;
+  }
+  if (contract.state) {
+    const { accepted, stale, dataFreshness, basis, incidents } = contract.state;
+    const input = scenario.input;
+    const expected = scenario.expected;
+    if ((input?.latestAcceptedCollectionAttemptAt !== null) !== accepted) {
+      check(false, `${scenario.id} must represent an ${accepted ? "accepted" : "unobserved"} observation`);
+      return false;
+    }
+    if (expected?.stale !== stale || expected?.dataFreshness !== dataFreshness || expected?.basis !== basis) {
+      check(false, accepted && !stale
+        ? `${scenario.id} accepted non-stale observation must be FRESH`
+        : `${scenario.id} state-boundary expectation does not match required scenario`);
+      return false;
+    }
+    for (const incidentContract of incidents ?? []) {
+      const found = (input?.openIncidentRefs ?? []).some(ref => {
+        const incident = data.fixtures?.[ref];
+        return incident?.status === "OPEN" && incident.ruleId === incidentContract.ruleId && incident.severity === incidentContract.severity;
+      });
+      check(found, `${scenario.id} must include an OPEN ${incidentContract.ruleId} ${incidentContract.severity} incident`);
+      if (!found) return false;
+    }
+  }
+  if (contract.cooldownSeconds !== undefined && scenario.input?.cooldownSeconds !== contract.cooldownSeconds) {
+    check(false, `${scenario.id} cooldownSeconds must be ${contract.cooldownSeconds}`);
+    return false;
+  }
+  return true;
+}
 function validateEventSequence(data, scenario) {
   const input = scenario.input; const expected = scenario.expected;
   check(Array.isArray(input) && input.length > 0, `${scenario.id}.input must be a non-empty array`); if (!Array.isArray(input) || !object(expected)) return;
@@ -343,6 +395,7 @@ function validateEventSequence(data, scenario) {
 
 function validateScenario(data, scenario) {
   check(object(scenario) && typeof scenario.id === "string" && typeof scenario.kind === "string", "scenario must have id and kind"); if (!object(scenario)) return;
+  if (!validateScenarioContract(data, scenario)) return;
   if (scenario.kind === "event-sequence") validateEventSequence(data, scenario);
   else if (scenario.kind === "state-boundary") {
      const input = scenario.input;
