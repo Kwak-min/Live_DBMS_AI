@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
         "app.collector.enabled=false",
         "app.metrics.retention-cleanup-enabled=false",
         "app.part-b.retention-cleanup-enabled=false",
+        "app.outbox.publisher-enabled=false",
         "app.database-security.verify-on-startup=false"
 })
 @ActiveProfiles("local")
