@@ -101,20 +101,20 @@ REST Metric의 전체 필드를 포함하되 `id`만 `metricId`로 매핑하고 
 | CONNECTION_RATIO | CONNECTION_RATIO_EXCEEDED | activeConnectionsRatio | 정책의 비율 임계치 |
 | SLOW_QUERY_RATE | SLOW_QUERIES_HIGH | slowQueriesPerSecond | 정책의 초당 증가량 임계치 |
 | CONNECTION_FAILURE | CONNECTION_FAILURE | connectionStatus | 15초 동안 CONNECTION_FAILED 관측 지속, FATAL |
-| COLLECTION_STALE | COLLECTION_STALE | collectionAgeSeconds | 활성 대상에서 시도 시작 시각/활성화 시각보다 staleAfterSeconds 경과, CRITICAL |
+| COLLECTION_STALE | COLLECTION_STALE | collectionAgeSeconds | accepted collection이 아직 없으면 `activationAt`, 있으면 마지막 accepted `collectionAttemptTime`으로부터 `staleAfterSeconds` 이상 경과, severity CRITICAL |
 
 - `(databaseConfigId,ruleId)`별 OPEN은 최대 1건. 재발은 이전 사건이 종료된 뒤 새 incidentId로 생성한다. 동시에 서로 다른 규칙 사건은 존재할 수 있다.
 - 지표 규칙은 각 심각도 임계치의 `>=` 지속 시간을 따로 누적하고 15초(정책 변경 가능) 충족한 가장 높은 단계를 선택한다. 임계치 미달 또는 무효 입력이면 해당 후보 타이머를 초기화한다.
 - OPEN 이후 더 높은 단계가 지속 조건을 충족하면 같은 사건의 severity·incidentVersion을 올린다. 낮은 단계로의 전이는 현재 단계 미만 상태가 recoverySeconds 동안 지속되고 하위 단계가 유효할 때 수행한다. warning 미만에서 recoverySeconds 성공 관측이 지속되면 RECOVERED 종료다.
-- 연속 관측의 최대 허용 간격은 10초다. 그보다 긴 간격/역순/중복/부분 실패/규칙 입력 null은 지속 시간을 늘리지 않고 후보/복구 타이머를 초기화한다. 기존 OPEN 사건은 유지한다. wall-clock 시간 경과만으로 정상 복구시키지 않는다.
+- 연속 관측의 최대 허용 간격은 10초다. consumer가 이미 처리한 `eventId` 또는 현재보다 오래된 metric/version/timestamp를 dedup·순서 판정으로 무시하면 상태, `lastObservedAt`, 후보/복구 타이머, 알림 `eligibleAt`을 전혀 바꾸지 않는다. 새로 수락한 관측 중 간격이 10초를 넘거나 `PARTIAL_FAILURE`이거나 규칙 입력이 null/invalid인 경우에만 후보 타이머와 복구 타이머를 초기화한다. 기존 OPEN 사건은 유지한다. wall-clock 시간 경과만으로 정상 복구시키지 않는다.
 - 접속 실패는 실패 관측 시각으로 누적하고 SUCCESS 관측이 15초 연속 유지될 때 종료한다. PARTIAL_FAILURE는 접속 실패 사건의 정상 복구 근거가 아니다.
-- stale은 1초 주기의 C 타이머로 계산한다. 새 SUCCESS 관측이 15초 지속되고 최신성이 회복되면 종료한다. 접속 실패가 계속 와서 시도는 FRESH여도 기존 stale 사건은 성공 관측이 복구 조건을 채울 때까지 유지한다.
-- riskLevel은 OPEN 사건의 최고 severity. 사건이 없으면 모든 활성 규칙에 유효한 최신 입력이 있고 필수 수집 SUCCESS인 경우만 INFO, 그 외 null이다. PAUSED는 항상 null. STALE은 관측 불가이며 C의 타이머 사건으로 CRITICAL 이상이 될 수 있다.
-- dataFreshness: enabled=false면 PAUSED; 활성화 후 미관측이고 유예 시간 전이면 NO_DATA; 현재 시도 시각/활성화 시각에서 staleAfterSeconds가 지나면 STALE; 그 외 관측이 있으면 FRESH다. FRESH는 수집 전달의 최신성을 뜻하며 DB 접속 성공과 같지 않다.
+- stale은 1초 주기의 C 타이머로 계산한다. 현재 configVersion에서 accepted collection이 아직 없으면 `activationAt`을 기준으로 `now < activationAt + staleAfterSeconds`인 동안 enabled 대상은 NO_DATA이고, 정확히 `now >= activationAt + staleAfterSeconds`가 되는 순간 STALE로 전환한다. accepted collection이 있으면 마지막 accepted `collectionAttemptTime`을 기준으로 같은 비교를 한다. 이 시각에 `COLLECTION_STALE` 사건을 severity CRITICAL로 열고, `riskLevel`은 모든 OPEN 사건 중 최고 severity로 계산한다. 따라서 stale 사건만/최고일 때 CRITICAL이며, FATAL `CONNECTION_FAILURE`가 함께 OPEN이면 riskLevel은 FATAL이다. 새 SUCCESS 관측이 15초 지속되고 최신성이 회복되면 종료한다. 접속 실패가 계속 와서 시도는 FRESH여도 기존 stale 사건은 성공 관측이 복구 조건을 채울 때까지 유지한다.
+- riskLevel은 OPEN 사건의 최고 severity다. 사건이 없으면 모든 활성 규칙에 유효한 최신 입력이 있고 필수 수집 SUCCESS인 경우만 INFO, 그 외 null이다. PAUSED는 항상 null이다. STALE은 관측 불가이며 `COLLECTION_STALE` 타이머 사건 자체의 severity는 CRITICAL이다.
+- dataFreshness: enabled=false면 PAUSED; 현재 configVersion에서 accepted collection이 아직 없고 유예 시간 전이면 NO_DATA; 정확히 `activationAt + staleAfterSeconds`가 지나면 STALE; accepted collection이 있으면 마지막 accepted `collectionAttemptTime`의 최신성에 따라 FRESH 또는 STALE이다. 기본 staleAfterSeconds=30이고 activationAt=t=0이면 t=29는 NO_DATA, t=30은 STALE이다. FRESH는 수집 전달의 최신성을 뜻하며 DB 접속 성공과 같지 않다.
 - connectionStatus는 SUCCESS이면 UP, CONNECTION_FAILED이면 DOWN, PARTIAL_FAILURE/관측 전은 UNKNOWN이다. lastSuccessAt은 SUCCESS에만 갱신한다.
-- 설정·정책 변경/수동 중단/삭제는 api.md의 resolutionReason으로 행정 종료한다. 실제 복구 알림을 보내지 않고 지속 타이머를 초기화한다. 상태·사건·중복 기록·outbox는 같은 트랜잭션으로 저장한다.
+- 정책 변경은 `CONNECTION_RATIO`·`SLOW_QUERY_RATE`처럼 현재 정책으로 설정할 수 있는 metric-rule 사건만 `POLICY_CHANGED`로 행정 종료하고 그 후보 타이머를 초기화한다. `CONNECTION_FAILURE`·`COLLECTION_STALE` 시스템 사건과 타이머는 정책 변경 중에도 유지한다. 수동 중단·삭제·설정 변경은 api.md의 resolutionReason으로 해당 OPEN 사건을 행정 종료하고 실제 복구 알림을 보내지 않는다. 상태·사건·중복 기록·outbox는 같은 트랜잭션으로 저장한다.
 
-재시작 시 저장된 OPEN 사건과 마지막 metricId를 복구하고 지속 후보 타이머는 초기화한다. 생성 후 staleAfterSeconds보다 오래된 메트릭은 과거 기록으로만 처리한다. pending을 재생했다는 이유로 옛 장애 알림/정상 복구를 새로 생성하지 않는다. C는 DB의 최신 메트릭을 확인하여 현재보다 오래된 Redis 이벤트가 최신값을 덮어쓰지 못하게 한다.
+재시작 시 저장된 OPEN 사건과 마지막 metricId를 복구하고 지속 후보 타이머는 초기화한다. 생성 후 staleAfterSeconds보다 오래된 메트릭은 과거 기록으로만 처리한다. 알림 작업의 `eligibleAt`·`expiresAt`·`nextAttemptAt`은 DB에서 복구하며, delayed worker는 저장된 `expiresAt`을 지켜 만료 작업을 CANCELLED로 처리하고 재시작을 이유로 창을 연장하지 않는다. pending을 재생했다는 이유로 옛 장애 알림/정상 복구를 새로 생성하지 않는다. C는 DB의 최신 메트릭을 확인하여 현재보다 오래된 Redis 이벤트가 최신값을 덮어쓰지 못하게 한다.
 
 ## 4. Redis 전달·ACK·복구
 
@@ -182,10 +182,10 @@ CONNECT native 헤더는 Authorization:Bearer <access>, accept-version:1.2, hear
 
 모든 활성 개인 Push 구독과 모든 활성 Slack 수신처가 모든 대상 사건을 받는다. 개인 Push는 해당 사용자/등록 세션도 유효해야 한다. MVP에서는 사용자별 대상 필터를 제공하지 않는다.
 
-- OPEN은 즉시 1회. 심각도 상승은 마지막 성공 알림에서 cooldown(기본 300초) 안이면 다음 허용 시각에 최신 상승 1건으로 병합한다. FATAL 상승은 cooldown을 우회한다. 하향은 알리지 않는다. 지속 장애에 정기 재알림은 없다.
-- RECOVERED는 cooldown을 우회해 1회, 단 해당 수신처에 개시/상승 알림을 성공 발송한 적이 있을 때만 보낸다. POLICY_CHANGED/MONITORING_PAUSED/CONFIG_CHANGED/TARGET_DELETED 종료는 알리지 않는다.
-- 발송 직전에 저장된 사건 버전·상태, 수신처/사용자/세션 활성 여부를 검사한다. 이미 복구된 사건의 미발송 OPEN/상승은 CANCELLED, 오래된 상승은 최신 작업으로 병합, 삭제 수신처도 CANCELLED. 생성 후 10분 지난 작업은 CANCELLED다.
-- 작업 고유 키 `(incidentId,incidentVersion,channel,recipientId)`로 저장 후 Redis ACK. 첫 시도+5/30/120초 재시도, 429의 Retry-After가 더 길면 그 값을 우선하며 10분 유효기간을 넘기면 취소한다. 404/410 수신처는 비활성화, 그 외 영구 4xx는 FAILED, 5xx/timeout만 재시도한다.
+- OPEN은 즉시 1회. 심각도 상승은 마지막 성공 개시/상승 알림에서 `notificationCooldownSeconds`(기본 300초, 60~3600초) 안이면 첫 대기 작업의 `eligibleAt`을 다음 허용 시각으로 정하고, `expiresAt=eligibleAt+600초`로 저장한다. 같은 사건·수신처의 더 새로운 비-FATAL 상승은 최신 incidentVersion/내용으로 병합하되 처음 정한 `eligibleAt`·`expiresAt`을 뒤로 미루지 않는다. `now < eligibleAt`은 cooldown 대기이고 `eligibleAt <= now < expiresAt`만 외부 발송·재시도 창이다. FATAL 상승은 대기 중인 비-FATAL 상승 작업을 CANCELLED로 대체하고 cooldown을 우회해 즉시 보내며, 하향은 알리지 않는다. 지속 장애에 정기 재알림은 없다.
+- RECOVERED는 cooldown을 우회해 즉시 1회 만들고, 단 해당 수신처에 개시/상승 알림을 성공 발송한 적이 있을 때만 보낸다. POLICY_CHANGED/MONITORING_PAUSED/CONFIG_CHANGED/TARGET_DELETED 종료는 알리지 않는다.
+- 발송 직전에 저장된 사건 버전·상태, 수신처/사용자/세션 활성 여부를 검사한다. 이미 복구된 사건의 미발송 OPEN/상승은 CANCELLED, 오래된 상승은 기존 대기 작업의 최신 내용으로 병합, 삭제 수신처도 CANCELLED다. `now >= expiresAt`인 작업은 CANCELLED이며, 생성 시각이 아니라 저장된 `eligibleAt` 기준의 600초 창을 사용한다.
+- 작업 고유 키 `(incidentId,incidentVersion,channel,recipientId)`로 저장 후 Redis ACK. `eligibleAt`에 첫 시도, 이후 +5/+30/+120초 재시도, 429의 Retry-After가 더 길어도 `expiresAt` 이후로는 연장하지 않는다. `404/410` 수신처는 비활성화, 그 외 영구 4xx는 FAILED, 5xx/timeout만 재시도한다. `eligibleAt`·`expiresAt`·`nextAttemptAt`은 영속화하여 재시작 후에도 cooldown 대기와 active send/retry 창을 구분한다.
 - 외부 서비스의 성공 응답을 잃은 경우 재시도로 중복 수신될 수 있다. 내부 사건/작업 중복 방지와 외부 정확히 한 번 배달을 동일하게 표현하지 않는다.
 
 ### Slack

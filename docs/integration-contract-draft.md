@@ -76,18 +76,20 @@ flowchart LR
 | Slow Query 경보 | 증가량/실제 초 = slowQueriesPerSecond; WARNING 1.0, CRITICAL 5.0, FATAL 미사용; 15초 지속 | C |
 | 정상 복구 | 모든 해당 규칙의 경고 기준 아래에서 15초 연속 성공 | C |
 | 접속 실패 사건 | 15초 연속 실패 후 FATAL; 15초 성공 후 복구 | C |
-| 미수집 사건 | 마지막 시도 시작/활성화 후 30초 경과 시 CRITICAL; 새 유효 수집이 15초 지속되면 복구 | C |
+| 미수집 사건 | 현재 configVersion에서 아직 accepted collection이 없으면 `activationAt`부터 `staleAfterSeconds`(기본 30초) 미경과는 NO_DATA, 정확히 경과한 시각부터 STALE·COLLECTION_STALE CRITICAL; accepted collection이 있으면 마지막 `collectionAttemptTime` 기준으로 stale을 계산하고 새 SUCCESS가 15초 지속되면 복구 | C |
 | Heartbeat | 수집 루프와 별도 10초, 늦음 기준 30초 | A·C |
 | Access / Refresh | JWT 15분 / opaque token 7일 절대 만료, 회전 | B |
 | 인증 키·비밀번호 | HS256 32바이트 이상 키 / Argon2id, 보안 문서의 파라미터 | B |
 | 내부 Redis 복구 창 | 최소 24시간, pending 보호; outbox 미발행은 삭제 금지 | A·C |
 | 중복 처리 기록 | 31일; 30일보다 오래된 메트릭의 자동 재처리 거부 | A·C |
-| 알림 | OPEN 즉시, 상승은 300초 안에서 병합(FATAL 즉시), 복구 즉시, 정기 재알림 없음 | C |
-| 외부 발송 재시도 | 첫 시도 + 5/30/120초 후 3회; 429는 Retry-After 존중 | C |
+| 알림 | OPEN 즉시, 상승은 `notificationCooldownSeconds`(기본 300초, 60~3600) 뒤 허용 시각에 최신 1건으로 병합(FATAL 즉시), 복구 즉시, 정기 재알림 없음 | C |
+| 외부 발송 재시도 | `eligibleAt` 이후 첫 시도 + 5/30/120초 후 3회; `expiresAt=eligibleAt+600초`, 429는 Retry-After 존중 | C |
 | 프론트 상태 대조 | 구독 직후·2초 후·이후 30초마다 REST 최신값 대조 | 프론트 |
 | 페이지 | page 0, size 20, 최대 100; 메트릭 recent 50/최대 1000 | 전원 |
 
 CPU/메모리는 실제 수집원이 없으므로 값 null·UNSUPPORTED, 정책 평가 제외다. QPS는 관측만 제공하고 기본 경보 규칙은 두지 않는다. DB별 수집 주기는 5초 고정이므로 설정 입력을 노출하지 않는다.
+
+알림 작업의 `eligibleAt`과 `expiresAt`은 PostgreSQL에 저장한다. cooldown 중에 처음 만들어진 상승 작업은 마지막 성공 개시/상승 알림 시각에 설정된 cooldown을 더해 `eligibleAt`을 정하고, `expiresAt`은 그 시각에서 600초 뒤다. 같은 사건·수신처의 더 새로운 비-FATAL 상승은 최신 내용으로 병합하지만 처음 정한 `eligibleAt`과 `expiresAt`을 뒤로 미루지 않는다. `now < eligibleAt`은 cooldown 대기, `eligibleAt <= now < expiresAt`은 외부 발송·재시도 창이며 `now >= expiresAt`은 취소다. FATAL 상승은 대기 중인 비-FATAL 상승 작업을 취소/대체하고 cooldown을 우회해 즉시 작업을 만들며, RECOVERED도 cooldown을 우회한다. 재시작 뒤에도 저장한 시각을 그대로 사용한다. 이미 처리한 중복·오래된 이벤트는 상태·지속/복구 타이머·`eligibleAt`을 바꾸지 않으며, 새로 수락한 invalid/gap 관측만 후보·복구 타이머를 초기화한다.
 
 ## 4. 현재 코드에서 바꿀 계약
 

@@ -144,9 +144,9 @@ Metric 필드는 [지표 사전](events.md)과 아래 예제로 고정한다. �
 | GET `/api/v1/incidents` | databaseConfigId,start,end,severity,status,page,size 모두 선택 | 200 Incident 페이지, openedAt DESC·incidentId ASC, USER/ADMIN |
 | GET `/api/v1/incidents/{incidentId}` | UUID | 200 Incident, USER/ADMIN |
 
-StatusSnapshot: `{databaseConfigId:Id,configVersion:Id,deleted:boolean,enabled:boolean,connectionStatus:UP|DOWN|UNKNOWN,dataFreshness:FRESH|STALE|NO_DATA|PAUSED,riskLevel:INFO|WARNING|CRITICAL|FATAL|null,lastAttemptAt:Time?,lastSuccessAt:Time?,latestMetricId:Id?,openIncidentIds:Uuid[],stateVersion:Id,updatedAt:Time}`. 미관측 대상도 200이며 riskLevel=null, enabled=true이면 NO_DATA, false이면 PAUSED다. 삭제된 대상은 404다. 일반 REST 응답의 deleted는 false다. stateVersion은 대상별 증가하며 설정 변경/재시작에도 감소하지 않는다.
+StatusSnapshot: `{databaseConfigId:Id,configVersion:Id,deleted:boolean,enabled:boolean,connectionStatus:UP|DOWN|UNKNOWN,dataFreshness:FRESH|STALE|NO_DATA|PAUSED,riskLevel:INFO|WARNING|CRITICAL|FATAL|null,lastAttemptAt:Time?,lastSuccessAt:Time?,latestMetricId:Id?,openIncidentIds:Uuid[],stateVersion:Id,updatedAt:Time}`. 미관측 대상도 200이다. 현재 configVersion에서 accepted collection이 아직 없으면 `activationAt`을 기준으로 `now < activationAt + staleAfterSeconds`일 때만 enabled 대상의 `dataFreshness=NO_DATA`로 표시한다. accepted collection이 있으면 마지막 `collectionAttemptTime`을 기준으로 stale을 계산한다. 정확히 각 기준 시각에 `staleAfterSeconds`가 경과하면 `STALE`로 전환하고 `COLLECTION_STALE` 타이머 사건을 severity=CRITICAL로 연다. `riskLevel`은 모든 OPEN 사건 중 최고 severity이므로 stale 사건만/최고일 때 CRITICAL이며, 동시에 FATAL 사건이 OPEN이면 FATAL이다. 기본 정책에서는 activationAt=t=0일 때 t=29초가 NO_DATA이고 t=30초가 STALE이다. enabled=false이면 항상 PAUSED이며 riskLevel=null이다. 삭제된 대상은 404다. 일반 REST 응답의 deleted는 false다. stateVersion은 대상별 증가하며 설정 변경/재시작에도 감소하지 않는다.
 
-PolicyWrite: `{version:Id,staleAfterSeconds:int,notificationCooldownSeconds:int,rules:Rule[]}`. RiskPolicy는 위 필드에 databaseConfigId·updatedAt을 추가한다. DB 생성 시 기본 정책 version=1을 제공한다. staleAfterSeconds는 30~300, cooldown은 60~3600. version이 다르면 409 POLICY_VERSION_CONFLICT.
+PolicyWrite: `{version:Id,staleAfterSeconds:int,notificationCooldownSeconds:int,rules:Rule[]}`. RiskPolicy는 위 필드에 databaseConfigId·updatedAt을 추가한다. DB 생성 시 기본 정책 version=1을 제공한다. `staleAfterSeconds`는 30~300, `notificationCooldownSeconds`는 기본 300초이며 60~3600초다. cooldown 중인 상승 전달은 마지막 성공 개시/상승 알림 뒤의 `eligibleAt`까지 대기하고, 같은 사건·수신처의 최신 비-FATAL 상승으로 병합해도 처음 정한 `eligibleAt`을 미루지 않는다. FATAL 상승은 대기 중 비-FATAL 상승 작업을 취소/대체하고 즉시 발송한다. 이 스케줄링 시각은 내부 저장·전달 규칙을 따른다. version이 다르면 409 POLICY_VERSION_CONFLICT.
 
 Rule은 `{ruleId:Text,metricName:Text,operator:"GTE",warningThreshold:number,criticalThreshold:number,fatalThreshold:number?,sustainSeconds:int,recoverySeconds:int,enabled:boolean}`. rules에는 CONNECTION_RATIO와 SLOW_QUERY_RATE 두 개를 정확히 한 번씩 포함한다. 임의 규칙 추가/삭제는 400, enabled로 활성화한다.
 
@@ -155,7 +155,7 @@ Rule은 `{ruleId:Text,metricName:Text,operator:"GTE",warningThreshold:number,cri
 | CONNECTION_RATIO | activeConnectionsRatio | 0.80 / 0.90 / 0.95 | 15 / 15초 |
 | SLOW_QUERY_RATE | slowQueriesPerSecond | 1.0 / 5.0 / null | 15 / 15초 |
 
-연결 비율 임계치는 0<warning<critical<fatal≤1. Slow Query는 0<warning<critical, fatal=null 고정. sustain/recovery는 5~300초의 5 배수. POLICY 변경 시 기존 모든 OPEN 지표 사건은 POLICY_CHANGED로 관리 종료하고 지속 타이머를 초기화한다. 접속 실패·미수집 시스템 사건은 유지한다. disabled 규칙은 판단하지 않는다. 시스템 규칙의 접속 실패 지속 15초/복구 15초는 수정 API에 노출하지 않고 staleAfterSeconds만 수정 가능하다.
+연결 비율 임계치는 0<warning<critical<fatal≤1. Slow Query는 0<warning<critical, fatal=null 고정. sustain/recovery는 5~300초의 5 배수다. POLICY 변경은 `CONNECTION_RATIO`·`SLOW_QUERY_RATE`처럼 현재 정책으로 설정할 수 있는 metric-rule의 OPEN 사건만 `POLICY_CHANGED`로 관리 종료하고 해당 후보 타이머를 초기화한다. `CONNECTION_FAILURE`와 `COLLECTION_STALE` 같은 시스템 사건은 종료하거나 타이머를 초기화하지 않고 유지한다. disabled 규칙은 판단하지 않는다. 시스템 규칙의 접속 실패 지속 15초/복구 15초는 수정 API에 노출하지 않고 `staleAfterSeconds`만 수정 가능하다.
 
 Incident 필수 필드: `{incidentId:Uuid,databaseConfigId:Id,databaseName:Text,ruleId:Text,ruleType:Text,severity:WARNING|CRITICAL|FATAL,status:OPEN|RESOLVED,openedAt:Time,lastObservedAt:Time,resolvedAt:Time?,resolutionReason:RECOVERED|POLICY_CHANGED|MONITORING_PAUSED|CONFIG_CHANGED|TARGET_DELETED|null,metricName:Text,metricValue:number?,thresholdValue:number?,sourceMetricId:Id?,message:Text,incidentVersion:Id}`. databaseName은 사건 개시 당시 표시명이며 이름 변경 후에도 보존한다. severity는 현재 또는 종료 직전 수준이다. 행정상 종료도 status=RESOLVED지만 resolutionReason으로 정상 복구와 구분한다.
 
@@ -192,7 +192,7 @@ PushSubscription: `{id:Id,createdAt:Time,updatedAt:Time,expirationTime:int?}`. e
 
 WebhookInput: `{name:Text,provider:"SLACK",url:Text,enabled:boolean}`. name trim 후 1~100, url 최대 2048; 모두 필수. provider는 수정 불가. 최대 10개. Webhook: `{id:Id,name:Text,provider:"SLACK",enabled:boolean,createdAt:Time,updatedAt:Time}`. URL·토큰 미반환. Slack 연결/발송 규격은 events.md, URL 검사는 보안 규격을 따른다.
 
-Delivery: `{id:Id,incidentId:Uuid,incidentVersion:Id,channel:WEB_PUSH|SLACK,recipientId:Id,status:PENDING|SENT|FAILED|CANCELLED,attemptCount:int,lastErrorCode:Text?,createdAt:Time,sentAt:Time?}`. 알림 결과 목록 기간은 createdAt 기준, 기본 24시간/최대 30일. 오류 코드는 TIMEOUT/RATE_LIMITED/RECIPIENT_GONE/REJECTED/PROVIDER_ERROR다. 수신처 삭제·이벤트 노후화는 CANCELLED이고 실패 재시도 대상으로 넣지 않는다.
+Delivery: `{id:Id,incidentId:Uuid,incidentVersion:Id,channel:WEB_PUSH|SLACK,recipientId:Id,status:PENDING|SENT|FAILED|CANCELLED,attemptCount:int,lastErrorCode:Text?,createdAt:Time,sentAt:Time?}`. 알림 결과 목록 기간은 createdAt 기준, 기본 24시간/최대 30일. 오류 코드는 TIMEOUT/RATE_LIMITED/RECIPIENT_GONE/REJECTED/PROVIDER_ERROR다. 수신처 삭제·이벤트 노후화는 CANCELLED이고 실패 재시도 대상으로 넣지 않는다. `eligibleAt`·`expiresAt`은 내부 스케줄러 컬럼이며 공개 Delivery 응답에는 추가하지 않는다.
 
 ## 8. 기준 커밋의 현재 REST 구현
 

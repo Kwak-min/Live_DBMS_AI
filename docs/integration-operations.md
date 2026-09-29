@@ -91,10 +91,10 @@ B의 쓰기 서비스는 C의 LifecyclePort를 호출하되 C가 참조하는 B 
 | audit_logs / access_logs | B | API의 이력 필드, index(occurred_at DESC,id DESC); 감사와 접속 조회 분리 |
 | push_subscriptions | C | id,user_id,sid,endpoint_hash,암호화 payload,expiration_time,enabled,deleted_at,timestamps; 활성 endpoint_hash만 partial unique |
 | notification_webhooks | C | id,name,provider=SLACK,암호화 URL,enabled,deleted_at,timestamps |
-| notification_deliveries | C | id,incident_id,incident_version,channel,recipient_id,status,attempt_count,next_attempt_at,error,sent_at |
+| notification_deliveries | C | id,incident_id,incident_version,channel,recipient_id,status,attempt_count,eligible_at,expires_at,next_attempt_at,error,sent_at |
 | blocked_reasons (legacy) | A 보존 | 기존 차단 이력 읽기 전용, v1 신규 쓰기 없음, 180일 보관 |
 
-incidents는 `(database_config_id,rule_id) WHERE status='OPEN'` partial unique index로 중복 사건을 막는다. notification_deliveries는 `(incident_id,incident_version,channel,recipient_id)` unique. resolved_at과 resolution_reason은 OPEN이면 둘 다 null, RESOLVED이면 둘 다 존재해야 한다.
+incidents는 `(database_config_id,rule_id) WHERE status='OPEN'` partial unique index로 중복 사건을 막는다. notification_deliveries는 `(incident_id,incident_version,channel,recipient_id)` unique이며 `expires_at = eligible_at + interval '600 seconds'` 제약을 둔다. 처음 cooldown 대기열에 들어간 비-FATAL 상승 작업의 `eligible_at`·`expires_at`은 최초 값으로 고정하고, 더 최신 비-FATAL 상승은 같은 작업 내용만 갱신한다. FATAL 상승은 대기 중인 비-FATAL 작업을 취소/대체하고 즉시 작업을 만든다. `now < eligible_at`은 cooldown 대기, `eligible_at <= now < expires_at`은 외부 발송·재시도 창, `now >= expires_at`은 CANCELLED다. 즉시 작업은 생성 시각을 `eligible_at`으로 삼고 동일한 600초 창을 사용한다. 두 시각과 `next_attempt_at`은 재시작 뒤에도 저장값을 사용한다. resolved_at과 resolution_reason은 OPEN이면 둘 다 null, RESOLVED이면 둘 다 존재해야 한다.
 
 메트릭 보관 삭제가 사건을 지우지 않도록 incidents.source_metric_id는 nullable FK ON DELETE SET NULL이다. 사건의 metricName/value/threshold는 스냅샷으로 보존한다. 대상은 물리 삭제하지 않으므로 과거 사건/이력의 FK가 끊어지지 않는다. Push/Webhook 삭제는 disabled+deleted_at tombstone으로 남겨 재시도·결과 조회의 수신처 ID를 보존한다.
 
@@ -127,7 +127,7 @@ outbox publisher는 1초 주기, 최대 100건, 대상별 생성 순서대로 �
 
 모든 수집 작업은 전체 15초 제한 내에 JDBC statement 취소·connection close로 종료한다. 실행 중인 대상의 다음 tick은 건너뛰며 동시에 두 수집을 하지 않는다. 실패 스냅샷도 가능한 한 PostgreSQL에 저장한다. PostgreSQL이 안 되면 미저장 관측을 Redis에만 먼저 발행하지 않고 운영 오류와 생존 신호를 남긴다.
 
-프로세스 시작 순서: PostgreSQL/Redis 준비 → Flyway 적용 → 필요하면 최초 Admin bootstrap → backend → frontend/proxy. 재시작 시 C는 저장된 상태/OPEN 사건을 읽고 지속 시간 후보를 초기화하며, 기존 사건을 INFO로 강제 복구하지 않는다. Redis 지연/누락 중 실시간 전송은 제한되지만 저장된 REST 이력은 조회 가능하다.
+프로세스 시작 순서: PostgreSQL/Redis 준비 → Flyway 적용 → 필요하면 최초 Admin bootstrap → backend → frontend/proxy. 재시작 시 C는 저장된 상태/OPEN 사건을 읽고 지속 시간 후보를 초기화하며, 알림 작업의 `eligible_at`·`expires_at`·`next_attempt_at`을 복원해 cooldown 대기와 active send/retry 창을 구분한다. delayed worker는 저장된 `expires_at` 이후 작업을 취소하고 재시작을 이유로 만료 시각을 연장하지 않는다. 기존 사건을 INFO로 강제 복구하지 않는다. Redis 지연/누락 중 실시간 전송은 제한되지만 저장된 REST 이력은 조회 가능하다.
 
 최초 v1 전환은 기존 consumer/수집기를 중지하고 PostgreSQL·Redis를 백업한다. 기존 무버전 Stream을 `archive:v0:<UTC기준시각>:<원래키>`로 rename하여 7일 보존하고 같은 기존 이름으로 v1 Stream을 새로 만든다. 보관 복사와 건수 확인 전에는 삭제하지 않는다. 구버전 이벤트를 v1 consumer에 투입하지 않는다. 시간·지표 의미가 달라 자동 무손실 변환을 가정하지 않는다.
 

@@ -233,6 +233,527 @@
           "message": "1~65535 범위여야 합니다."
         }
       ]
+    },
+    "metricMeasuredZero": {
+      "id": 503,
+      "databaseConfigId": 12,
+      "configVersion": 2,
+      "timestamp": "2026-09-28T03:00:20.000Z",
+      "collectionAttemptTime": "2026-09-28T03:00:20.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:20.000Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 0,
+      "maxConnections": 151,
+      "qps": 0,
+      "slowQueries": 0,
+      "slowQueriesDelta": 0,
+      "slowQueriesPerSecond": 0,
+      "metricWindowSeconds": 5,
+      "threadsRunning": 0,
+      "storageBytes": 0,
+      "responseTimeMs": 9,
+      "collectionStatus": "SUCCESS",
+      "errorCode": null,
+      "errorMessage": null,
+      "unavailableMetrics": {
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED"
+      }
+    },
+    "metricPartialFailure": {
+      "id": 504,
+      "databaseConfigId": 12,
+      "configVersion": 2,
+      "timestamp": "2026-09-28T03:00:25.000Z",
+      "collectionAttemptTime": "2026-09-28T03:00:25.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:20.000Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 20,
+      "maxConnections": 151,
+      "qps": null,
+      "slowQueries": 320,
+      "slowQueriesDelta": null,
+      "slowQueriesPerSecond": null,
+      "metricWindowSeconds": null,
+      "threadsRunning": 4,
+      "storageBytes": null,
+      "responseTimeMs": 15,
+      "collectionStatus": "PARTIAL_FAILURE",
+      "errorCode": "QUERY_FAILED",
+      "errorMessage": "일부 필수 지표를 조회하지 못했습니다.",
+      "unavailableMetrics": {
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED",
+        "qps": "QUERY_FAILED",
+        "slowQueriesDelta": "QUERY_FAILED",
+        "slowQueriesPerSecond": "QUERY_FAILED",
+        "metricWindowSeconds": "QUERY_FAILED",
+        "storageBytes": "QUERY_FAILED"
+      }
+    },
+    "metricMeasuredZeroEvent": {
+      "schemaVersion": 1,
+      "eventId": "7f6a1c08-9ef4-45bd-bc2e-5b2d1c1a2f11",
+      "eventType": "MetricCollectedEvent",
+      "publishedAt": "2026-09-28T03:00:20.050Z",
+      "metricId": 503,
+      "databaseConfigId": 12,
+      "configVersion": 2,
+      "databaseName": "운영 MariaDB",
+      "timestamp": "2026-09-28T03:00:20.000Z",
+      "collectionAttemptTime": "2026-09-28T03:00:20.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:20.000Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 0,
+      "maxConnections": 151,
+      "qps": 0,
+      "slowQueries": 0,
+      "slowQueriesDelta": 0,
+      "slowQueriesPerSecond": 0,
+      "metricWindowSeconds": 5,
+      "threadsRunning": 0,
+      "storageBytes": 0,
+      "responseTimeMs": 9,
+      "collectionStatus": "SUCCESS",
+      "errorCode": null,
+      "errorMessage": null,
+      "unavailableMetrics": {
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED"
+      }
+    },
+    "metricPartialFailureEvent": {
+      "schemaVersion": 1,
+      "eventId": "a8f5221c-48da-4b8e-8f14-67c2fbfc38d3",
+      "eventType": "MetricCollectedEvent",
+      "publishedAt": "2026-09-28T03:00:25.050Z",
+      "metricId": 504,
+      "databaseConfigId": 12,
+      "configVersion": 2,
+      "databaseName": "운영 MariaDB",
+      "timestamp": "2026-09-28T03:00:25.000Z",
+      "collectionAttemptTime": "2026-09-28T03:00:25.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:20.000Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 20,
+      "maxConnections": 151,
+      "qps": null,
+      "slowQueries": 320,
+      "slowQueriesDelta": null,
+      "slowQueriesPerSecond": null,
+      "metricWindowSeconds": null,
+      "threadsRunning": 4,
+      "storageBytes": null,
+      "responseTimeMs": 15,
+      "collectionStatus": "PARTIAL_FAILURE",
+      "errorCode": "QUERY_FAILED",
+      "errorMessage": "일부 필수 지표를 조회하지 못했습니다.",
+      "unavailableMetrics": {
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED",
+        "qps": "QUERY_FAILED",
+        "slowQueriesDelta": "QUERY_FAILED",
+        "slowQueriesPerSecond": "QUERY_FAILED",
+        "metricWindowSeconds": "QUERY_FAILED",
+        "storageBytes": "QUERY_FAILED"
+      }
+    },
+    "metricOldConfigEvent": {
+      "schemaVersion": 1,
+      "eventId": "6b0f9a7e-0d71-4e2a-9e89-4b4a36a1d9c2",
+      "eventType": "MetricCollectedEvent",
+      "publishedAt": "2026-09-28T03:00:30.050Z",
+      "metricId": 490,
+      "databaseConfigId": 12,
+      "configVersion": 1,
+      "databaseName": "운영 MariaDB",
+      "timestamp": "2026-09-28T03:00:30.000Z",
+      "collectionAttemptTime": "2026-09-28T03:00:30.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:30.000Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 1,
+      "maxConnections": 151,
+      "qps": 0,
+      "slowQueries": 0,
+      "slowQueriesDelta": 0,
+      "slowQueriesPerSecond": 0,
+      "metricWindowSeconds": 5,
+      "threadsRunning": 1,
+      "storageBytes": 0,
+      "responseTimeMs": 10,
+      "collectionStatus": "SUCCESS",
+      "errorCode": null,
+      "errorMessage": null,
+      "unavailableMetrics": {
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED"
+      }
+    },
+    "monitoringStatusChangedEvent": {
+      "schemaVersion": 1,
+      "eventId": "20412297-1a93-44bc-9944-a8d8a03765aa",
+      "eventType": "MonitoringStatusChangedEvent",
+      "databaseConfigId": 12,
+      "publishedAt": "2026-09-28T03:00:00.100Z",
+      "configVersion": 2,
+      "deleted": false,
+      "enabled": true,
+      "connectionStatus": "UP",
+      "dataFreshness": "FRESH",
+      "riskLevel": "INFO",
+      "lastAttemptAt": "2026-09-28T03:00:00.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:00.000Z",
+      "latestMetricId": 501,
+      "openIncidentIds": [],
+      "stateVersion": 8,
+      "updatedAt": "2026-09-28T03:00:00.080Z"
+    },
+    "connectionFailureIncidentEvent": {
+      "schemaVersion": 1,
+      "eventId": "b7d6ea72-2525-4e56-a5a8-e44d17d2f3b1",
+      "eventType": "IncidentCreatedEvent",
+      "publishedAt": "2026-09-28T03:20:15.050Z",
+      "timestamp": "2026-09-28T03:20:15.000Z",
+      "sourceEventId": null,
+      "incidentId": "a17fb64c-1fd6-4a88-bd16-6e2977aa0e42",
+      "databaseConfigId": 12,
+      "databaseName": "운영 MariaDB",
+      "ruleId": "CONNECTION_FAILURE",
+      "ruleType": "CONNECTION_FAILURE",
+      "severity": "FATAL",
+      "status": "OPEN",
+      "openedAt": "2026-09-28T03:20:15.000Z",
+      "lastObservedAt": "2026-09-28T03:20:15.000Z",
+      "resolvedAt": null,
+      "resolutionReason": null,
+      "metricName": "connectionStatus",
+      "metricValue": null,
+      "thresholdValue": null,
+      "sourceMetricId": null,
+      "message": "접속 실패가 15초 이상 지속되었습니다.",
+      "incidentVersion": 1
+    },
+    "collectionStaleIncidentEvent": {
+      "schemaVersion": 1,
+      "eventId": "d2f6c8a1-6a72-4f84-9dd1-28cf5a1c9e64",
+      "eventType": "IncidentCreatedEvent",
+      "publishedAt": "2026-09-28T04:01:00.000Z",
+      "timestamp": "2026-09-28T04:01:00.000Z",
+      "sourceEventId": null,
+      "incidentId": "d04f7fb6-3c6a-4c9f-8f61-5dc0c3c6652a",
+      "databaseConfigId": 12,
+      "databaseName": "운영 MariaDB",
+      "ruleId": "COLLECTION_STALE",
+      "ruleType": "COLLECTION_STALE",
+      "severity": "CRITICAL",
+      "status": "OPEN",
+      "openedAt": "2026-09-28T04:01:00.000Z",
+      "lastObservedAt": "2026-09-28T04:01:00.000Z",
+      "resolvedAt": null,
+      "resolutionReason": null,
+      "metricName": "collectionAgeSeconds",
+      "metricValue": 60,
+      "thresholdValue": 60,
+      "sourceMetricId": null,
+      "message": "활성 대상에서 최신 수집 시각이 staleAfterSeconds 경계를 넘었습니다.",
+      "incidentVersion": 1
     }
-  }
+  },
+  "notificationPolicy": {
+    "defaultCooldownSeconds": 300,
+    "minCooldownSeconds": 60,
+    "maxCooldownSeconds": 3600,
+    "queuedJobTtlSeconds": 600
+  },
+  "mappings": {
+    "metricRestToInternal": [
+      {
+        "restRef": "metricSuccess",
+        "eventRef": "metricCollectedEvent"
+      },
+      {
+        "restRef": "metricMeasuredZero",
+        "eventRef": "metricMeasuredZeroEvent"
+      },
+      {
+        "restRef": "metricPartialFailure",
+        "eventRef": "metricPartialFailureEvent"
+      }
+    ],
+    "statusInternalToStomp": {
+      "internalRef": "monitoringStatusChangedEvent",
+      "stompRef": "statusMessage"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "duplicate-event-id",
+      "kind": "event-sequence",
+      "input": [
+        {
+          "fixtureRef": "metricCollectedEvent",
+          "receivedAt": "2026-09-28T03:00:00.051Z"
+        },
+        {
+          "fixtureRef": "metricCollectedEvent",
+          "receivedAt": "2026-09-28T03:00:00.200Z"
+        }
+      ],
+      "expected": {
+        "acceptedInputIndexes": [0],
+        "ignoredInputIndexes": [1],
+        "acceptedFixtureRefs": ["metricCollectedEvent"],
+        "ignoredFixtureRefs": ["metricCollectedEvent"],
+        "currentState": {
+          "fixtureRef": "metricCollectedEvent",
+          "databaseConfigId": 12,
+          "configVersion": 2,
+          "metricId": 501
+        },
+        "timerAction": "UNCHANGED",
+        "reason": "DUPLICATE_EVENT_ID"
+      }
+    },
+    {
+      "id": "late-out-of-order-event",
+      "kind": "event-sequence",
+      "input": [
+        {
+          "fixtureRef": "metricMeasuredZeroEvent",
+          "receivedAt": "2026-09-28T03:00:20.051Z"
+        },
+        {
+          "fixtureRef": "metricCollectedEvent",
+          "receivedAt": "2026-09-28T03:00:20.200Z"
+        }
+      ],
+      "expected": {
+        "acceptedInputIndexes": [0],
+        "ignoredInputIndexes": [1],
+        "acceptedFixtureRefs": ["metricMeasuredZeroEvent"],
+        "ignoredFixtureRefs": ["metricCollectedEvent"],
+        "currentState": {
+          "fixtureRef": "metricMeasuredZeroEvent",
+          "databaseConfigId": 12,
+          "configVersion": 2,
+          "metricId": 503
+        },
+        "timerAction": "UNCHANGED",
+        "reason": "LATE_OR_OUT_OF_ORDER"
+      }
+    },
+    {
+      "id": "old-config-event",
+      "kind": "event-sequence",
+      "input": [
+        {
+          "fixtureRef": "metricMeasuredZeroEvent",
+          "receivedAt": "2026-09-28T03:00:20.051Z"
+        },
+        {
+          "fixtureRef": "metricOldConfigEvent",
+          "receivedAt": "2026-09-28T03:00:30.051Z"
+        }
+      ],
+      "expected": {
+        "acceptedInputIndexes": [0],
+        "ignoredInputIndexes": [1],
+        "acceptedFixtureRefs": ["metricMeasuredZeroEvent"],
+        "ignoredFixtureRefs": ["metricOldConfigEvent"],
+        "currentState": {
+          "fixtureRef": "metricMeasuredZeroEvent",
+          "databaseConfigId": 12,
+          "configVersion": 2,
+          "metricId": 503
+        },
+        "timerAction": "UNCHANGED",
+        "reason": "OLD_CONFIG_VERSION"
+      }
+    },
+    {
+      "id": "accepted-partial-failure-resets-timers",
+      "kind": "event-sequence",
+      "input": [
+        {
+          "fixtureRef": "metricMeasuredZeroEvent",
+          "receivedAt": "2026-09-28T03:00:20.051Z"
+        },
+        {
+          "fixtureRef": "metricPartialFailureEvent",
+          "receivedAt": "2026-09-28T03:00:25.051Z"
+        }
+      ],
+      "expected": {
+        "acceptedInputIndexes": [0, 1],
+        "ignoredInputIndexes": [],
+        "acceptedFixtureRefs": ["metricMeasuredZeroEvent", "metricPartialFailureEvent"],
+        "ignoredFixtureRefs": [],
+        "currentState": {
+          "fixtureRef": "metricPartialFailureEvent",
+          "databaseConfigId": 12,
+          "configVersion": 2,
+          "metricId": 504
+        },
+        "timerAction": "RESET_CANDIDATE_AND_RECOVERY_TIMERS",
+        "reason": "ACCEPTED_INVALID_OBSERVATION"
+      }
+    },
+    {
+      "id": "stale-boundary-before",
+      "kind": "state-boundary",
+      "input": {
+        "enabled": true,
+        "activationAt": "2026-09-28T04:00:00.000Z",
+        "latestAcceptedCollectionAttemptAt": null,
+        "openIncidentRefs": [],
+        "staleAfterSeconds": 60,
+        "evaluatedAt": "2026-09-28T04:00:59.999Z"
+      },
+      "expected": {
+        "elapsedSeconds": 59.999,
+        "dataFreshness": "NO_DATA",
+        "stale": false,
+        "riskLevel": null,
+        "basis": "ACTIVATION_BEFORE_FIRST_ACCEPTED_OBSERVATION"
+      }
+    },
+    {
+      "id": "accepted-observation-fresh",
+      "kind": "state-boundary",
+      "input": {
+        "enabled": true,
+        "activationAt": "2026-09-28T04:00:00.000Z",
+        "latestAcceptedCollectionAttemptAt": "2026-09-28T04:00:30.000Z",
+        "openIncidentRefs": [],
+        "staleAfterSeconds": 60,
+        "evaluatedAt": "2026-09-28T04:00:59.999Z"
+      },
+      "expected": {
+        "elapsedSeconds": 29.999,
+        "dataFreshness": "FRESH",
+        "stale": false,
+        "riskLevel": null,
+        "basis": "LAST_ACCEPTED_COLLECTION_ATTEMPT"
+      }
+    },
+    {
+      "id": "stale-boundary-at",
+      "kind": "state-boundary",
+      "input": {
+        "enabled": true,
+        "activationAt": "2026-09-28T04:00:00.000Z",
+        "latestAcceptedCollectionAttemptAt": null,
+        "openIncidentRefs": ["collectionStaleIncidentEvent"],
+        "staleAfterSeconds": 60,
+        "evaluatedAt": "2026-09-28T04:01:00.000Z"
+      },
+      "expected": {
+        "elapsedSeconds": 60,
+        "dataFreshness": "STALE",
+        "stale": true,
+        "riskLevel": "CRITICAL",
+        "basis": "ACTIVATION_BEFORE_FIRST_ACCEPTED_OBSERVATION"
+      }
+    },
+    {
+      "id": "stale-preserves-fatal-risk",
+      "kind": "state-boundary",
+      "input": {
+        "enabled": true,
+        "activationAt": "2026-09-28T03:59:00.000Z",
+        "latestAcceptedCollectionAttemptAt": "2026-09-28T04:00:00.000Z",
+        "openIncidentRefs": ["collectionStaleIncidentEvent", "connectionFailureIncidentEvent"],
+        "staleAfterSeconds": 60,
+        "evaluatedAt": "2026-09-28T04:01:00.000Z"
+      },
+      "expected": {
+        "elapsedSeconds": 60,
+        "dataFreshness": "STALE",
+        "stale": true,
+        "riskLevel": "FATAL",
+        "basis": "LAST_ACCEPTED_COLLECTION_ATTEMPT"
+      }
+    },
+    {
+      "id": "policy-change-metric-only",
+      "kind": "policy-change",
+      "input": {
+        "databaseConfigId": 12,
+        "changedAt": "2026-09-28T04:02:00.000Z",
+        "oldPolicyVersion": 1,
+        "newPolicyVersion": 2,
+        "openIncidentRefs": ["incidentOpenedEvent", "connectionFailureIncidentEvent", "collectionStaleIncidentEvent"]
+      },
+      "expected": {
+        "resolvedIncidentRefs": ["incidentOpenedEvent"],
+        "maintainedIncidentRefs": ["connectionFailureIncidentEvent", "collectionStaleIncidentEvent"],
+        "resolutionReason": "POLICY_CHANGED",
+        "metricTimers": "RESET",
+        "systemIncidents": "MAINTAIN_OPEN",
+        "systemTimers": {
+          "CONNECTION_FAILURE": "MAINTAIN",
+          "COLLECTION_STALE": "MAINTAIN"
+        }
+      }
+    },
+    {
+      "id": "cooldown-3600-keeps-eligibility",
+      "kind": "notification-cooldown",
+      "input": {
+        "incidentRef": "incidentOpenedEvent",
+        "incidentVersion": 3,
+        "channel": "SLACK",
+        "recipientId": 7,
+        "lastSuccessfulNotificationAt": "2026-09-28T03:00:00.000Z",
+        "queuedAt": "2026-09-28T03:00:10.000Z",
+        "mergedEscalationAt": "2026-09-28T03:30:00.000Z",
+        "fatalEscalationAt": "2026-09-28T03:45:00.000Z",
+        "cooldownSeconds": 3600,
+        "queuedJob": {
+          "jobId": "c1b4a865-7b6a-4f9c-a9c4-8fcbf68ef6c7",
+          "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+          "incidentVersion": 3,
+          "channel": "SLACK",
+          "recipientId": 7,
+          "severity": "CRITICAL",
+          "status": "PENDING",
+          "eligibleAt": "2026-09-28T04:00:00.000Z",
+          "expiresAt": "2026-09-28T04:10:00.000Z"
+        }
+      },
+      "expected": {
+        "status": "PENDING",
+        "eligibleAt": "2026-09-28T04:00:00.000Z",
+        "expiresAt": "2026-09-28T04:10:00.000Z",
+        "at600Seconds": {
+          "observedAt": "2026-09-28T03:10:10.000Z",
+          "status": "PENDING",
+          "expired": false
+        },
+        "atEligibility": {
+          "observedAt": "2026-09-28T04:00:00.000Z",
+          "status": "READY",
+          "expired": false
+        },
+        "atExpiry": {
+          "observedAt": "2026-09-28T04:10:00.000Z",
+          "status": "CANCELLED",
+          "expired": true
+        },
+        "mergedEscalationDoesNotSlideEligibility": true,
+        "mergedEscalationEligibleAt": "2026-09-28T04:00:00.000Z",
+        "fatalOverride": {
+          "status": "READY",
+          "severity": "FATAL",
+          "eligibleAt": "2026-09-28T03:45:00.000Z",
+          "cancelsQueuedNonFatal": true
+        }
+      }
+    }
+  ]
 }
