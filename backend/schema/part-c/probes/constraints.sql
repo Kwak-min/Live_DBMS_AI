@@ -23,7 +23,10 @@ BEGIN
     WHERE table_schema = 'part_c_probe'
       AND table_type = 'BASE TABLE'
       AND table_name NOT IN (
-          'users', 'auth_sessions', 'database_configs', 'metric_data', 'event_outbox'
+          'users', 'auth_sessions', 'used_refresh_tokens',
+          'database_configs', 'metric_data', 'blocked_reasons',
+          'audit_logs', 'access_logs', 'event_outbox', 'processed_events',
+          'flyway_schema_history'
       );
 
     IF actual_tables IS DISTINCT FROM expected_tables THEN
@@ -81,6 +84,7 @@ $probe$;
 DO $probe$
 DECLARE
     outbox_columns TEXT[];
+    processed_columns TEXT[];
     typed_columns INTEGER;
 BEGIN
     SELECT array_agg(column_name ORDER BY ordinal_position)
@@ -88,6 +92,12 @@ BEGIN
     FROM information_schema.columns
     WHERE table_schema = 'part_c_probe'
       AND table_name = 'event_outbox';
+
+    SELECT array_agg(column_name ORDER BY ordinal_position)
+    INTO processed_columns
+    FROM information_schema.columns
+    WHERE table_schema = 'part_c_probe'
+      AND table_name = 'processed_events';
 
     SELECT count(*)
     INTO typed_columns
@@ -99,14 +109,16 @@ BEGIN
                AND udt_name = 'timestamptz'));
 
     IF outbox_columns IS DISTINCT FROM ARRAY[
-        'event_id', 'event_type', 'payload', 'created_at', 'published_at',
-        'attempts', 'next_attempt_at'
+        'event_id', 'seq', 'event_type', 'stream_key', 'ordering_key', 'payload',
+        'created_at', 'published_at', 'attempts', 'next_attempt_at', 'last_error'
+    ] OR processed_columns IS DISTINCT FROM ARRAY[
+        'stream', 'consumer_group', 'event_id', 'processed_at'
     ] OR typed_columns <> 4 THEN
-        RAISE EXCEPTION 'unexpected event_outbox shape: %, typed columns %',
-            outbox_columns, typed_columns;
+        RAISE EXCEPTION 'unexpected A common shape: outbox %, processed %, typed columns %',
+            outbox_columns, processed_columns, typed_columns;
     END IF;
 
-    INSERT INTO part_c_probe_results VALUES ('event_outbox_exact_seven_columns');
+    INSERT INTO part_c_probe_results VALUES ('event_outbox_actual_eleven_columns');
 END
 $probe$;
 
