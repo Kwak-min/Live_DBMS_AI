@@ -1,0 +1,78 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: monitoring-backend
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/monitoring_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      timeout: 2000ms
+
+app:
+  security:
+    # Comma-separated CIDRs. Empty means X-Forwarded-For is never trusted.
+    trusted-proxy-cidrs: '${TRUSTED_PROXY_CIDRS:}'
+  auth:
+    jwt-signing-keys: '${JWT_SIGNING_KEYS:}'
+    jwt-active-kid: '${JWT_ACTIVE_KID:}'
+    public-origin: '${PUBLIC_ORIGIN:http://localhost:5173}'
+    secure-cookies: ${AUTH_SECURE_COOKIES:true}
+  database-security:
+    encryption-keys: '${DB_CONFIG_ENCRYPTION_KEYS:}'
+    active-key-version: '${DB_CONFIG_ACTIVE_KEY_VERSION:}'
+    verify-on-startup: ${DB_CONFIG_VERIFY_ON_STARTUP:true}
+    allowed-cidrs: '${TARGET_DB_ALLOWED_CIDRS:}'
+    allowed-ports: '${TARGET_DB_ALLOWED_PORTS:3306}'
+  redis:
+    stream-key: stream:metrics
+  collector:
+    enabled: true
+    fixed-rate-ms: 5000
+    connection-timeout-seconds: 5
+  metrics:
+    retention-days: 30
+    retention-cleanup-enabled: true
+    retention-cleanup-cron: "0 0 3 * * *"
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+
+management:
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

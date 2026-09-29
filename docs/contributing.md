@@ -31,7 +31,7 @@ main
 | API 문서화 | REST API는 Swagger/OpenAPI로 작성하고 WebSocket 이벤트 메시지 규격도 문서화 |
 | Git 협업 | 파트별 feature 브랜치, 기능 단위 커밋, PR 제출 후 코드 리뷰 |
 | 이벤트 규격 | `MetricCollectedEvent`, `IncidentCreatedEvent`의 DTO 필드 형식 공동 정의 |
-| Redis 전달 방식 | Streams/PubSub 선택과 C 재시작 시 이벤트 복구 범위 사전 합의. Streams를 사용할 경우 Consumer Group 구성도 정의 |
+| Redis 전달 방식 | Redis Streams 사용. Consumer Group·ACK·중복 방지·재시작 처리는 [이벤트 규격](events.md)을 따름 |
 | 통합 테스트 | 로그인 → DB 등록 → 수집·대시보드 전송 → 임계치 초과·장애 알림 → 정상화·복구 검증 |
 
-백엔드 언어·프레임워크와 Redis 전달 방식은 이 문서에서 최종 확정하지 않습니다.
+기술·DTO·보안·운영 정책은 [팀 배포용 규격 v0.2](integration-contract-draft.md)를 개발 기준으로 사용합니다. 문서 변경은 feature/docs-integration-contracts에서 진행하고 develop에 직접 작업하지 않습니다.

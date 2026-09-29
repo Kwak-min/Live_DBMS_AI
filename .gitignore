@@ -9,6 +9,12 @@ build/
 .next/
 coverage/
 
+# Java / Gradle build artifacts
+.gradle/
+backend/gradle-user-home/
+bin/
+*.class
+
 # Local secrets
 .env
 .env.*

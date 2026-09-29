@@ -1,0 +1,13 @@
+spring:
+  main:
+    # The bootstrap command is an offline administrative process. It must never
+    # bind an HTTP port, even briefly, while creating the first administrator.
+    web-application-type: none
+
+app:
+  part-b:
+    retention-cleanup-enabled: false
+  collector:
+    enabled: false
+  metrics:
+    retention-cleanup-enabled: false
