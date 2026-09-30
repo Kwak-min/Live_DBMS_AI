@@ -2,7 +2,9 @@ package com.example.monitoring.scheduler;
 
 import com.example.monitoring.collector.DbMetricsCollector;
 import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.port.TargetMetadata;
 import com.example.monitoring.database.port.TargetProvider;
+import com.example.monitoring.database.security.DatabaseCredentialUnavailableException;
 import com.example.monitoring.domain.MetricData;
 import com.example.monitoring.metric.MetricCollectionRecorder;
 import jakarta.annotation.PreDestroy;
@@ -69,8 +71,8 @@ public class MetricSchedulerWorker {
         Cycle cycle = new Cycle(now());
         currentCycle = cycle;
         try {
-            List<CollectorTarget> targets = targetProvider.listEnabled();
-            for (CollectorTarget target : targets) {
+            List<TargetMetadata> targets = targetProvider.listEnabled();
+            for (TargetMetadata target : targets) {
                 submit(target, cycle);
             }
         } catch (Exception e) {
@@ -80,7 +82,7 @@ public class MetricSchedulerWorker {
         }
     }
 
-    private void submit(CollectorTarget target, Cycle cycle) {
+    private void submit(TargetMetadata target, Cycle cycle) {
         if (!inFlight.add(target.id())) {
             log.debug("Previous collection still running; skipping tick. databaseConfigId={}", target.id());
             return;
@@ -112,6 +114,28 @@ public class MetricSchedulerWorker {
         } catch (Exception e) {
             // PostgreSQL 장애 등으로 저장하지 못하면 이벤트도 발행하지 않는다.
             log.error("Failed to collect or record metrics. databaseConfigId={}", target.id(), e);
+        }
+    }
+
+    void collectAndRecord(TargetMetadata summary) {
+        try {
+            targetProvider.getForCollection(summary.id()).ifPresent(target -> {
+                if (target.configVersion() == summary.configVersion()) collectAndRecord(target);
+            });
+        } catch (DatabaseCredentialUnavailableException exception) {
+            // The list never decrypts; one bad target must not suppress the other targets' observations.
+            log.warn("Target credentials unavailable. databaseConfigId={}, configVersion={}, "
+                            + "usernameKeyVersion={}, passwordKeyVersion={}",
+                    summary.id(), summary.configVersion(), exception.usernameKeyVersion(),
+                    exception.passwordKeyVersion());
+            try {
+                MetricData failure = dbMetricsCollector.credentialsUnavailable(summary.id());
+                metricCollectionRecorder.record(summary, failure);
+            } catch (Exception recordingFailure) {
+                log.error("Failed to record credential failure. databaseConfigId={}", summary.id(), recordingFailure);
+            }
+        } catch (Exception exception) {
+            log.error("Failed to load collection target. databaseConfigId={}", summary.id(), exception);
         }
     }
 

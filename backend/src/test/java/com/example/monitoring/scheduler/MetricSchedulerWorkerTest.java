@@ -2,8 +2,12 @@ package com.example.monitoring.scheduler;
 
 import com.example.monitoring.collector.DbMetricsCollector;
 import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.port.TargetMetadata;
 import com.example.monitoring.database.port.TargetProvider;
+import com.example.monitoring.database.security.DatabaseCredentialUnavailableException;
+import com.example.monitoring.domain.CollectionStatus;
 import com.example.monitoring.domain.MetricData;
+import com.example.monitoring.domain.MetricErrorCode;
 import com.example.monitoring.metric.MetricCollectionRecorder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +39,7 @@ class MetricSchedulerWorkerTest {
     @BeforeEach
     void setUp() {
         worker = new MetricSchedulerWorker(targetProvider, collector, recorder);
-        when(recorder.record(any(), any())).thenReturn(Optional.empty());
+        when(recorder.record(any(CollectorTarget.class), any())).thenReturn(Optional.empty());
     }
 
     @AfterEach
@@ -56,7 +60,9 @@ class MetricSchedulerWorkerTest {
             return new MetricData();
         });
         when(collector.collectMetrics(other)).thenReturn(new MetricData());
-        when(targetProvider.listEnabled()).thenReturn(List.of(slow, other));
+        when(targetProvider.listEnabled()).thenReturn(List.of(summary(slow), summary(other)));
+        when(targetProvider.getForCollection(1L)).thenReturn(Optional.of(slow));
+        when(targetProvider.getForCollection(2L)).thenReturn(Optional.of(other));
 
         worker.executeCollectionCycle();
         assertThat(slowStarted.await(5, TimeUnit.SECONDS)).isTrue();
@@ -85,16 +91,38 @@ class MetricSchedulerWorkerTest {
     @DisplayName("Recording failure (e.g. PostgreSQL down) is logged and releases the target for the next tick")
     void recordFailureReleasesTarget() throws Exception {
         CollectorTarget target = target(3L);
-        when(targetProvider.listEnabled()).thenReturn(List.of(target));
+        when(targetProvider.listEnabled()).thenReturn(List.of(summary(target)));
+        when(targetProvider.getForCollection(3L)).thenReturn(Optional.of(target));
         when(collector.collectMetrics(target)).thenReturn(new MetricData());
-        when(recorder.record(any(), any())).thenThrow(new IllegalStateException("db down"));
+        when(recorder.record(any(CollectorTarget.class), any())).thenThrow(new IllegalStateException("db down"));
 
         worker.executeCollectionCycle();
-        verify(recorder, timeout(2000)).record(any(), any());
+        verify(recorder, timeout(2000)).record(any(CollectorTarget.class), any());
         awaitReleased(3L);
 
         worker.executeCollectionCycle();
         verify(collector, timeout(2000).times(2)).collectMetrics(target);
+    }
+
+    @Test
+    @DisplayName("One failed credential is recorded while another target still collects")
+    void credentialFailureIsTargetScoped() {
+        CollectorTarget healthy = target(5L);
+        TargetMetadata failed = summary(target(4L));
+        when(targetProvider.listEnabled()).thenReturn(List.of(failed, summary(healthy)));
+        when(targetProvider.getForCollection(4L)).thenThrow(
+                new DatabaseCredentialUnavailableException(4L, 1L, 1, 1,
+                        new IllegalStateException("bad key")));
+        when(targetProvider.getForCollection(5L)).thenReturn(Optional.of(healthy));
+        MetricData failure = MetricData.builder().collectionStatus(CollectionStatus.PARTIAL_FAILURE)
+                .errorCode(MetricErrorCode.INTERNAL_ERROR).build();
+        when(collector.credentialsUnavailable(4L)).thenReturn(failure);
+        when(collector.collectMetrics(healthy)).thenReturn(new MetricData());
+
+        worker.executeCollectionCycle();
+
+        verify(recorder, timeout(2000)).record(failed, failure);
+        verify(collector, timeout(2000)).collectMetrics(healthy);
     }
 
     private void awaitReleased(long id) throws InterruptedException {
@@ -107,5 +135,10 @@ class MetricSchedulerWorkerTest {
 
     private static CollectorTarget target(long id) {
         return new CollectorTarget(id, 1L, "db" + id, "127.0.0.1", 13306, null, "u", "p", true);
+    }
+
+    private static TargetMetadata summary(CollectorTarget target) {
+        return new TargetMetadata(target.id(), target.configVersion(), target.name(), target.host(), target.port(),
+                target.databaseName(), target.enabled());
     }
 }

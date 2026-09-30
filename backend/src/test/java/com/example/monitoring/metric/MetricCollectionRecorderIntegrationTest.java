@@ -6,6 +6,8 @@ import com.example.monitoring.common.outbox.OutboxEventRepository;
 import com.example.monitoring.common.outbox.OutboxWriter;
 import com.example.monitoring.collector.MetricSnapshotCalculator;
 import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.port.TargetMetadata;
+import com.example.monitoring.domain.CollectionStatus;
 import com.example.monitoring.domain.MetricData;
 import com.example.monitoring.domain.MetricErrorCode;
 import com.example.monitoring.dto.MetricResponseDto;
@@ -100,6 +102,22 @@ class MetricCollectionRecorderIntegrationTest {
                 "SELECT status, last_error_message FROM database_configs WHERE id = ?", id);
         assertThat(config.get("status")).isEqualTo("DOWN");
         assertThat(config.get("last_error_message")).isEqualTo("대상 DB 인증에 실패했습니다.");
+    }
+
+    @Test
+    @DisplayName("Credential failure produces only that target's PARTIAL_FAILURE event and UNKNOWN display status")
+    void credentialFailureIsRecorded() {
+        long id = insertTarget("bad-key", 1, true, false);
+        TargetMetadata summary = new TargetMetadata(id, 1L, "bad-key", "127.0.0.1", 13306, null, true);
+
+        MetricData failed = recorder.record(summary, calculator.internalError(id, T0, 0, true)).orElseThrow();
+
+        assertThat(failed.getCollectionStatus()).isEqualTo(CollectionStatus.PARTIAL_FAILURE);
+        assertThat(failed.getErrorCode()).isEqualTo(MetricErrorCode.INTERNAL_ERROR);
+        assertThat(failed.getLastSuccessAt()).isNull();
+        assertThat(eventsFor(id)).hasSize(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM database_configs WHERE id = ?", String.class, id))
+                .isEqualTo("UNKNOWN");
     }
 
     @Test
