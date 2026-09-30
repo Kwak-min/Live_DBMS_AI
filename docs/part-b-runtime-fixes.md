@@ -12,7 +12,8 @@ PR #2의 인증·DB 관리, PR #11의 C lifecycle 호출은 이미 `develop`에 
 - [x] 표시용 연결 상태는 성공 `UP`, 접속 실패 `DOWN`, 부분 실패 `UNKNOWN`으로 구분.
 - [x] 전체 테스트 결과를 아래에 기입.
 - [ ] 실제 Docker 통합 실행 결과를 아래에 기입.
-- [ ] 새 PR을 `develop`으로 제출하고 A/C가 변경된 `TargetProvider`·수집 경계를 검토.
+- [x] 새 PR #12를 `develop` 대상으로 제출.
+- [ ] A/C가 변경된 `TargetProvider`·수집 경계를 검토하고 병합.
 
 ## 아직 남은 통합 작업과 이유
 
