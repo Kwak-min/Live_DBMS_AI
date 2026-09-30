@@ -81,6 +81,11 @@ public class MariaDbMetricsCollector implements DbMetricsCollector {
         }
     }
 
+    @Override
+    public MetricData credentialsUnavailable(long databaseConfigId) {
+        return calculator.internalError(databaseConfigId, Instant.now().truncatedTo(ChronoUnit.MILLIS), 0, true);
+    }
+
     /** 필수 원본 조회. 실패하면 빈 map을 반환해 해당 지표를 QUERY_FAILED로 만든다. */
     private Map<String, String> queryNameValue(Connection connection, String sql, long deadlineNanos, long targetId) {
         Map<String, String> values = new HashMap<>();

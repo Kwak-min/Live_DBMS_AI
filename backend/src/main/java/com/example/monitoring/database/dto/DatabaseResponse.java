@@ -4,7 +4,9 @@ import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.TargetDbStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /** Deliberately excludes username, password, and future encrypted fields. */
 public record DatabaseResponse(
@@ -17,14 +19,21 @@ public record DatabaseResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Long configVersion,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = {"UP", "DOWN", "UNKNOWN", "BLOCKED"},
                 description = "BLOCKED is a legacy A-state pending shared v0.2 conversion") TargetDbStatus connectionStatus,
-        @Schema(nullable = true, description = "Legacy local date-time; UTC conversion awaits A/B shared DTO migration") LocalDateTime lastAttemptAt,
-        @Schema(nullable = true, description = "Legacy local date-time; UTC conversion awaits A/B shared DTO migration") LocalDateTime lastSuccessAt,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Legacy local date-time; UTC conversion awaits A/B shared DTO migration") LocalDateTime createdAt,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Legacy local date-time; UTC conversion awaits A/B shared DTO migration") LocalDateTime updatedAt
+        @Schema(nullable = true, description = "UTC last collection attempt") Instant lastAttemptAt,
+        @Schema(nullable = true, description = "UTC last successful collection") Instant lastSuccessAt,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "UTC creation time") Instant createdAt,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "UTC last update time") Instant updatedAt
 ) {
     public static DatabaseResponse from(DatabaseConfig config) {
         return new DatabaseResponse(config.getId(), config.getName(), config.getHost(), config.getPort(),
                 config.getDatabaseName(), config.getEnabled(), config.getConfigVersion(), config.getStatus(),
-                config.getLastCheckedAt(), config.getLastSuccessAt(), config.getCreatedAt(), config.getUpdatedAt());
+                toInstant(config.getLastCheckedAt()), toInstant(config.getLastSuccessAt()),
+                toInstant(config.getCreatedAt()), toInstant(config.getUpdatedAt()));
+    }
+
+    // database_configs remains TIMESTAMP WITHOUT TIME ZONE through V3. Its Java writers use
+    // the JVM default zone, so interpret the legacy values in that same zone at the API boundary.
+    private static Instant toInstant(LocalDateTime value) {
+        return value == null ? null : value.atZone(ZoneId.systemDefault()).toInstant();
     }
 }

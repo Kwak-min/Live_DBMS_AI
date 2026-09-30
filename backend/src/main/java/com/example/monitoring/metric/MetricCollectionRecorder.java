@@ -3,6 +3,7 @@ package com.example.monitoring.metric;
 import com.example.monitoring.common.outbox.OutboxEventType;
 import com.example.monitoring.common.outbox.OutboxWriter;
 import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.port.TargetMetadata;
 import com.example.monitoring.domain.CollectionStatus;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.MetricData;
@@ -38,22 +39,32 @@ public class MetricCollectionRecorder {
     /** @return 저장된 스냅샷. 설정이 바뀌었거나 삭제·비활성화되었으면 empty */
     @Transactional
     public Optional<MetricData> record(CollectorTarget target, MetricData metric) {
-        DatabaseConfig config = lockActiveTarget(target.id());
+        return record(target.id(), target.configVersion(), metric);
+    }
+
+    /** Records a credential failure without ever constructing a target containing fake credentials. */
+    @Transactional
+    public Optional<MetricData> record(TargetMetadata target, MetricData metric) {
+        return record(target.id(), target.configVersion(), metric);
+    }
+
+    private Optional<MetricData> record(long targetId, long configVersion, MetricData metric) {
+        DatabaseConfig config = lockActiveTarget(targetId);
         if (config == null || !Boolean.TRUE.equals(config.getEnabled())
-                || config.getConfigVersion() == null || config.getConfigVersion() != target.configVersion()) {
+                || config.getConfigVersion() == null || config.getConfigVersion() != configVersion) {
             return Optional.empty();
         }
 
         metric.setDatabaseConfig(config);
-        metric.setConfigVersion(target.configVersion());
+        metric.setConfigVersion(configVersion);
         metric.setLastSuccessAt(metric.getCollectionStatus() == CollectionStatus.SUCCESS
                 ? metric.getTimestamp()
-                : previousLastSuccessAt(target.id(), target.configVersion()));
+                : previousLastSuccessAt(targetId, configVersion));
         MetricData saved = metricDataRepository.saveAndFlush(metric);
 
-        outboxWriter.append(UUID.randomUUID(), OutboxEventType.METRIC_COLLECTED, "database:" + config.getId(),
+        outboxWriter.append(UUID.randomUUID(), OutboxEventType.METRIC_COLLECTED, "database:" + targetId,
                 MetricCollectedPayload.from(saved, config.getId(), config.getName()));
-        updateDisplayStatus(config.getId(), saved);
+        updateDisplayStatus(targetId, saved);
         return Optional.of(saved);
     }
 
@@ -86,7 +97,8 @@ public class MetricCollectionRecorder {
                             d.lastSuccessAt = CASE WHEN :success = true THEN :checkedAt ELSE d.lastSuccessAt END
                         WHERE d.id = :id
                         """)
-                .setParameter("status", success ? TargetDbStatus.UP : TargetDbStatus.DOWN)
+                .setParameter("status", success ? TargetDbStatus.UP : metric.getCollectionStatus() == CollectionStatus.CONNECTION_FAILED
+                        ? TargetDbStatus.DOWN : TargetDbStatus.UNKNOWN)
                 .setParameter("checkedAt", checkedAt)
                 .setParameter("error", success ? null : metric.getErrorMessage())
                 .setParameter("success", success)
