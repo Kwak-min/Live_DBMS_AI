@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/databases/5",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "76966c54-7022-4bbd-9e8e-3ec935716659",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": 5,
+      "name": "scn-a-1001024804-renamed",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "enabled": true,
+      "configVersion": 2,
+      "connectionStatus": "UP",
+      "lastAttemptAt": "2026-10-01T02:48:39.773Z",
+      "lastSuccessAt": "2026-10-01T02:48:39.773Z",
+      "createdAt": "2026-10-01T02:48:05.331Z",
+      "updatedAt": "2026-10-01T02:48:25.565Z"
+    }
+  }
+}

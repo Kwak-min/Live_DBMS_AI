@@ -674,7 +674,7 @@ class Runner:
                                    "scenarios": [{"id": s.id, "title": s.title, "result": s.result,
                                                   "checks": s.checks, "notes": s.notes, "pending": s.pending}
                                                  for s in self.scenarios.values()]})
-        print("\n" + "\n".join(lines[:8 + len(self.scenarios)]))
+        print("\n" + "\n".join(lines[:9 + len(self.scenarios)]))
         return all(s.result != "FAIL" for s in self.scenarios.values())
 
 

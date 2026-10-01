@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases",
+    "body": {
+      "name": "scn-empty-1001024804",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "username": "<redacted>",
+      "password": "<redacted>",
+      "enabled": false
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "X-Request-Id": "75857462-af93-409b-a443-bf9d37c67328",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": 6,
+      "name": "scn-empty-1001024804",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "enabled": false,
+      "configVersion": 1,
+      "connectionStatus": "UNKNOWN",
+      "lastAttemptAt": null,
+      "lastSuccessAt": null,
+      "createdAt": "2026-10-01T02:48:10.062Z",
+      "updatedAt": "2026-10-01T02:48:10.065Z"
+    }
+  }
+}
