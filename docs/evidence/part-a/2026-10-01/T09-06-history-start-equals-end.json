@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/6/history?start=2026-01-01T00:00:00.000Z&end=2026-01-01T00:00:00.000Z",
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "X-Request-Id": "17c540a1-0652-418f-8b4d-ee4e90ebc09e",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "code": "INVALID_TIME_RANGE",
+      "message": "start는 end보다 이전이어야 합니다.",
+      "requestId": "17c540a1-0652-418f-8b4d-ee4e90ebc09e",
+      "fieldErrors": []
+    }
+  }
+}

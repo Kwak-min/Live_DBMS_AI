@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/6/history?start=2026-01-01T00:00:00.000Z&end=2026-01-01T01:00:00.000Z",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "1adb2e3d-1074-4334-a21f-24f4de0d401b",
+      "Content-Type": "application/json"
+    },
+    "body": []
+  }
+}

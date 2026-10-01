@@ -1,0 +1,24 @@
+{
+  "changedAt": "2026-10-01T02:48:25.671Z",
+  "staleRowsAfterChange": "0",
+  "firstNewVersionMetric": {
+    "id": "1121",
+    "configVersion": "2",
+    "timestamp": "2026-10-01T02:48:29.778Z",
+    "status": "SUCCESS",
+    "errorCode": "",
+    "qps": "",
+    "qpsUnavailable": "WARMUP",
+    "slowQueries": "0",
+    "slowQueriesDelta": "",
+    "activeConnections": "3"
+  },
+  "config": {
+    "status": "UP",
+    "lastCheckedAt": "2026-10-01 11:48:39.773",
+    "lastSuccessAt": "2026-10-01 11:48:39.773",
+    "lastErrorMessage": "",
+    "configVersion": "2",
+    "enabled": "t"
+  }
+}

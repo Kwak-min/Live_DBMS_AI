@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases/5/ping",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "991ee20f-1c47-4184-a63d-ef723120009c",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "databaseConfigId": 5,
+      "status": "UP",
+      "version": "10.11.19-MariaDB-ubu2204",
+      "responseTimeMs": 4,
+      "timestamp": "2026-10-01T02:48:53.080Z",
+      "errorCode": null,
+      "errorMessage": null
+    }
+  }
+}

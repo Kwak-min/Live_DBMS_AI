@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/6/history?start=2026-01-01T00:00:00.000Z",
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "X-Request-Id": "9dab8e5e-54b8-4d76-a0ca-e46be5e5e770",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "요청 값을 확인해 주세요.",
+      "requestId": "9dab8e5e-54b8-4d76-a0ca-e46be5e5e770",
+      "fieldErrors": [
+        {
+          "field": "end",
+          "code": "REQUIRED",
+          "message": "end은(는) 필수입니다."
+        }
+      ]
+    }
+  }
+}

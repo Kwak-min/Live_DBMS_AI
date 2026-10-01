@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/6/history?start=2026-01-01T00:00:00&end=2026-01-01T01:00:00.000Z",
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "X-Request-Id": "0fee9ead-ece6-46bf-8a75-010f47d0c55f",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "요청 값을 확인해 주세요.",
+      "requestId": "0fee9ead-ece6-46bf-8a75-010f47d0c55f",
+      "fieldErrors": [
+        {
+          "field": "start",
+          "code": "INVALID_FORMAT",
+          "message": "start은(는) UTC 시각(예: 2026-09-28T03:00:00.000Z)이어야 합니다."
+        }
+      ]
+    }
+  }
+}

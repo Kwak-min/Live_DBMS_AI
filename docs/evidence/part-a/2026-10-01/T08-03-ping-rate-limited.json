@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases/5/ping",
+    "body": null
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "X-Request-Id": "bf80268d-ebb2-4137-aed8-cafee12406af",
+      "Retry-After": "10",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "code": "RATE_LIMITED",
+      "message": "대상별 Ping은 10초에 한 번만 실행할 수 있습니다.",
+      "requestId": "bf80268d-ebb2-4137-aed8-cafee12406af",
+      "fieldErrors": []
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "retentionDays": 30,
+  "expired": [
+    "1167",
+    "2026-09-01T02:44:56.608Z"
+  ],
+  "kept": [
+    "1168",
+    "2026-09-01T02:54:56.608Z"
+  ],
+  "expiredDeleted": true,
+  "keptRemaining": "1",
+  "recentRemaining": "19"
+}

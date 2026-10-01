@@ -84,6 +84,8 @@
 
 각 항목에 실행 날짜·기준 SHA·입력·관측 결과·증거 경로를 붙인다. 아래는 기대 결과이지 이번 턴의 실행 결과가 아니다.
 
+실행 기록: A 범위(T06~T11, T13, T26)는 [part-a-integration-results.md](part-a-integration-results.md).
+
 | ID | 실행 | 기대 결과 |
 | --- | --- | --- |
 | T01 | 일반 가입에 role=ADMIN 주입 | 400, 정상 가입은 USER, 비밀번호 hash만 저장 |

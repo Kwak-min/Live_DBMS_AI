@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/5/latest",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "2753e92d-70a6-4f1c-86d2-d49fcde31467",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": 1144,
+      "databaseConfigId": 5,
+      "configVersion": 4,
+      "timestamp": "2026-10-01T02:49:09.778Z",
+      "collectionAttemptTime": "2026-10-01T02:49:09.778Z",
+      "lastSuccessAt": "2026-10-01T02:49:04.783Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": null,
+      "maxConnections": null,
+      "qps": null,
+      "slowQueries": null,
+      "slowQueriesDelta": null,
+      "slowQueriesPerSecond": null,
+      "metricWindowSeconds": null,
+      "threadsRunning": null,
+      "storageBytes": null,
+      "responseTimeMs": 2,
+      "collectionStatus": "CONNECTION_FAILED",
+      "errorCode": "CONNECTION_REFUSED",
+      "errorMessage": "대상 DB가 연결을 거부했습니다.",
+      "unavailableMetrics": {
+        "qps": "COLLECTION_FAILED",
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED",
+        "slowQueries": "COLLECTION_FAILED",
+        "storageBytes": "COLLECTION_FAILED",
+        "maxConnections": "COLLECTION_FAILED",
+        "threadsRunning": "COLLECTION_FAILED",
+        "slowQueriesDelta": "COLLECTION_FAILED",
+        "activeConnections": "COLLECTION_FAILED",
+        "metricWindowSeconds": "COLLECTION_FAILED",
+        "slowQueriesPerSecond": "COLLECTION_FAILED"
+      }
+    }
+  }
+}

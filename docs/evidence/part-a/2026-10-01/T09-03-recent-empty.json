@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/6/recent",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "f8af3766-b83e-438f-8f18-6874b9651fbd",
+      "Content-Type": "application/json"
+    },
+    "body": []
+  }
+}
