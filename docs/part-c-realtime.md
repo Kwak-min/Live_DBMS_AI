@@ -1,34 +1,32 @@
 # Part C realtime integration handoff
 
-This is the checked-source handoff for the Part C Stage 3 realtime slice. It
-describes what is present in the local C candidate and the gates that still
-belong to the A/B/C integration. It is an implementation handoff, not a release
-or deployment approval.
+This is the checked-source handoff for the Part C realtime slice on active V4.
+It describes the current metric stream path, lifecycle boundary, and the
+remaining future metric-driven live-state consumer. It is an implementation
+handoff, not a release or deployment approval.
 
 ## Candidate and migration status
 
-The C candidate is based on the merged Actual A V3 baseline at
-`d3308d10de8b1a439e93c8099c2901ee3c5dc40d` (A source
-`b7d54171b029566c9cf2995dbad61117dfdda178`). B production callers and C
-status/incident REST producers remain integration work; this checkout does not
-change upstream branches.
+The C candidate is based on the merged Actual A V3 baseline with the forward-
+only C V4 migration. B production database callers require the synchronous
+`MonitoringLifecyclePort` inside their existing write transaction. This
+document does not claim a risk engine, notification delivery, or a live-status
+read switch; those remain future consumers of the durable C state.
 
 The migration order is deliberately:
 
 ```text
 B V2 (auth, sessions, database credential columns)
     -> A V3 (metric and common event infrastructure, including processed_events)
-    -> C V4 (staged Part C tables)
+    -> C V4 (active Part C tables)
 ```
 
-The application's migration locations now contain the canonical V1 baseline,
-B V2, and Actual A V3. A V3 creates the production `event_outbox` and
+The application's migration locations contain the canonical V1 baseline, B V2,
+Actual A V3, and active C V4. A V3 creates the production `event_outbox` and
 `processed_events` tables and migrates A metric timestamps to `TIMESTAMPTZ`,
-represented by `Instant` in the A model. C V4 remains at
-`backend/schema/part-c/V4__part_c_monitoring.sql`, outside the Flyway classpath,
-until the two missing composite-key prerequisites are finalized. Do not copy
-the staged V4 into `backend/src/main/resources/db/migration` as a realtime
-workaround.
+represented by `Instant` in the A model. V4 adds the named composite keys,
+creates the seven C tables, and initializes retained targets transactionally.
+There is no second staged production copy and V1/V2/V3 remain unchanged.
 
 The `processed_events` table is A-owned production infrastructure supplied by
 V3. The full Stage 3 integration runs against that Actual A V3 table; isolated
@@ -39,21 +37,23 @@ an environment that has no Actual A V3 `processed_events` table fails closed
 when the consumer verifies its prerequisite; it does not create a C-owned
 table.
 
-The staged V4 also requires a composite key
-`UNIQUE (sid, user_id)` on `auth_sessions` for its session-owner foreign key.
-The checked B V2 migration currently creates `sid` as a primary key and an
-index on `user_id`, but does not create that composite unique constraint. This
-is an integration gate for B/A migration reconciliation. The test fixture under
-`backend/schema/part-c/test-fixtures/V2_V3_prerequisites.sql` supplies the
-required key so that staged-schema probes can be run in isolation; it does not
-represent the production B migration. Actual A V3 likewise still lacks
-`UNIQUE (id, database_config_id)` on `metric_data`, so both keys remain V4 gates.
+V4 declares `UNIQUE (sid, user_id)` on `auth_sessions` and
+`UNIQUE (id, database_config_id)` on `metric_data` before creating its foreign
+keys. These are forward-only V4 constraints; the applied V2/V3 migration text
+is unchanged. The disposable catalog and constraint probes under
+`backend/schema/part-c/probes` inspect an already migrated database and do not
+represent a production migration.
 
 Lifecycle events use A's common `OutboxWriter` and `OutboxEventType`: C supplies
 body-only JSON, the `database:<id>` ordering key, and flushes each append. The
 writer adds the common envelope and routes status and incident events to their
 own streams. C's occurrence time remains in the event body and is distinct from
 the writer's envelope creation time.
+
+V4 retained-target initialization uses one millisecond transaction epoch for
+enabled, nondeleted targets, preserves historical metrics without seeding C
+state, and emits no synthetic lifecycle outbox events. A future `cg:risk`
+consumer owns metric-driven state updates after that epoch.
 
 The PR6 interface and DTO contract remains canonical and unchanged. Contract
 handoff commit `3586788` is published and merged into `develop`; this checkout
@@ -112,6 +112,14 @@ keep metric, status, and incident ordering cursors separate. The current
 branch's A metric controllers expose `/api/v1/metrics/{dbId}/latest`,
 `recent`, and `history`; the status and incident REST producers are still C
 work and are not claimed as available by this handoff.
+
+V4 lifecycle changes do write durable C state and status outbox rows for B
+create/update/pause/resume/delete operations. A future `cg:risk` metric
+consumer must establish the live C attempt/success/latest-metric fields and
+must reject pre-activation historical metrics; until that consumer exists, B
+keeps its existing status reads and A keeps the four-column
+`database_configs` display writer. This handoff therefore does not claim that
+risk/stale/notification status is being evaluated or delivered.
 
 ## Authentication and native STOMP
 
@@ -210,6 +218,8 @@ The repository's checked scripts are the source of truth for local commands:
 # From the repository root. Requires Docker Compose; this is a command recipe,
 # not a claim that Docker was available during this handoff.
 .\scripts\start-local-services.ps1
+# Add -WithMariaDb only when the target database is needed.
+.\scripts\start-local-services.ps1 -WithMariaDb
 
 # From the repository root, in another terminal. Requires JDK 17.
 .\backend\scripts\run-local.ps1
@@ -217,6 +227,10 @@ The repository's checked scripts are the source of truth for local commands:
 # From the repository root, after the local check.
 .\scripts\stop-local-services.ps1
 ```
+
+The start script selects `postgres redis` by default and adds
+`mariadb-target` only with `-WithMariaDb`; both scripts select the canonical
+`docker-compose.yml` explicitly. Stop uses `down` and retains named volumes.
 
 The local profile uses PostgreSQL `localhost:5432/monitoring_db`, Redis
 `localhost:6379`, and `PUBLIC_ORIGIN=http://localhost:5173`. It leaves realtime
@@ -241,7 +255,7 @@ $env:STAGE3_APP_PORT = '18093'
 ```
 
 That class uses the Actual A V3 `processed_events` and `event_outbox` tables,
-asserts Flyway versions `1`, `2`, and `3` with no V4, seeds a user and three
+asserts active Flyway versions `1`, `2`, `3`, and `4`, seeds a user and three
 target rows, and uses the configured Stage 3 stream (default
 `stream:stage3-integration`). Isolated consumer tests mirror `processed_events`
 inline with `VARCHAR(128)` stream and consumer-group columns. Run the full
@@ -262,10 +276,10 @@ $contract = Get-Content -Raw .\docs\contract-examples.json |
 $payload = $contract.fixtures.metricCollectedEvent |
     ConvertTo-Json -Depth 20 -Compress
 $entryId = $payload |
-    docker compose exec -T redis redis-cli -x XADD $probeStream '*' payload
-docker compose exec -T redis redis-cli --raw XRANGE $probeStream $entryId $entryId
-docker compose exec -T redis redis-cli XDEL $probeStream $entryId
-docker compose exec -T redis redis-cli DEL $probeStream
+    docker compose -f docker-compose.yml exec -T redis redis-cli -x XADD $probeStream '*' payload
+docker compose -f docker-compose.yml exec -T redis redis-cli --raw XRANGE $probeStream $entryId $entryId
+docker compose -f docker-compose.yml exec -T redis redis-cli XDEL $probeStream $entryId
+docker compose -f docker-compose.yml exec -T redis redis-cli DEL $probeStream
 ```
 
 The probe is serialization/transport inspection only. A controlled end-to-end
@@ -294,11 +308,11 @@ handoff, native WebSocket/STOMP CONNECT and subscription authorization,
 metric delivery, protocol/subscription errors, token expiry, logout
 revalidation, and the ordered error-before-close behavior.
 
-The live check uses Actual A V3's production `processed_events` table when run
-against the integrated application. Isolated consumer checks mirror the table
-inline and must not be read as a migration receipt. C V4 remains staged outside
-Flyway until both V2/V3 keys are present:
-`UNIQUE (sid, user_id)` on `auth_sessions` and `UNIQUE (id,
-database_config_id)` on `metric_data`. The Compose commands above are local
-recipes and require Docker Compose; no Docker execution is implied by this
-document.
+The live check uses Actual A V3's production `processed_events` table and active
+V4 when run against the integrated application. Isolated consumer checks mirror
+the table inline and must not be read as a migration receipt. V4's named
+composite keys are forward-only and V1/V2/V3 remain unchanged. Before a V4
+deployment, stop and drain old application writers, keep the migration lock
+until its commit completes, and start the new binary before reopening writes.
+The Compose commands above are local recipes and require Docker Compose; no
+Docker execution is implied by this document.

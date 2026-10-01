@@ -9,17 +9,19 @@ This Spring Boot application runs on JDK 17 with the repository Gradle 8.5 wrapp
 3. From `backend`, run `./scripts/run-local.ps1` or set `SPRING_PROFILES_ACTIVE=local` and run `./gradlew.bat bootRun`.
 4. Stop infrastructure with `./scripts/stop-local-services.ps1`. Named volumes remain intact.
 
-The compose file publishes PostgreSQL, Redis, and optional MariaDB only on `127.0.0.1`. Redis uses AOF with `appendfsync everysec` and `maxmemory-policy noeviction`. The local profile binds the backend to `127.0.0.1`; staging and production must use the deployment ingress binding and its controls. The application does not load `.env`; `backend/.env.example` is a key and format reference.
+The canonical `docker-compose.yml` publishes PostgreSQL, Redis, and the optional `mariadb-target` only on `127.0.0.1`. Redis uses AOF with `appendfsync everysec` and `maxmemory-policy noeviction`. The local profile binds the backend to `127.0.0.1`; staging and production must use the deployment ingress binding and its controls. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
-The checked-in `docker-compose.yml` is an alternative local stack with PostgreSQL 16, Redis 7.4, and a MariaDB 10.11 target on port 13306. Its `monitor` credentials are local-only. The backend still requires locally generated B signing and encryption keys; never commit those values. CLI authentication calls need `Origin: http://localhost:5173` and the `X-CSRF-Token` returned by `/api/v1/auth/csrf`.
+The checked-in `docker-compose.yml` is the sole local stack with PostgreSQL 16 (`monitoring_db`, `postgres`/`postgres`), Redis 7.4, and a MariaDB 10.11 target on port 13306. Its credentials are local-only and the target is initialized from `infra/local/mariadb-init`. The backend still requires locally generated B signing and encryption keys; never commit those values. CLI authentication calls need `Origin: http://localhost:5173` and the `X-CSRF-Token` returned by `/api/v1/auth/csrf`.
 
-Local defaults connect to PostgreSQL at `localhost:5432/monitoring_db` with the compose-only account and to Redis at `localhost:6379` without a password. These defaults exist only in `application-local.yml`. Staging and production must inject all datasource and Redis values, including passwords. The application does not load `.env`; `backend/.env.example` is a key and format reference.
+Local defaults connect to PostgreSQL at `localhost:5432/monitoring_db` as `postgres`/`postgres` and to Redis at `localhost:6379` without a password. These defaults exist only in `application-local.yml`. Staging and production must inject all datasource and Redis values, including passwords. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
 ## Migrations
 
 Flyway owns schema creation and Hibernate uses `ddl-auto=validate`. Automatic baselining and Flyway clean are disabled. `V1__baseline_existing_schema.sql` creates exactly the four current legacy entity tables. Existing databases must be backed up, compared with V1, and explicitly baselined at version 1 only after they match; the application never baselines, drops, or rewrites existing data automatically.
 
-V1 deliberately preserves historical Java `LocalDateTime` as PostgreSQL `timestamp without time zone`. A's active V3 requires `LEGACY_TIME_ZONE` when legacy metric rows exist and converts them to UTC instants; do not infer an unknown historical zone. Migration ownership is coordinated as V1 legacy/A coordination, V2 Part B, V3 Part A, and V4 Part C. Part C's V4 remains staged outside `classpath:db/migration` until its two composite-key prerequisites are reconciled.
+V1 deliberately preserves historical Java `LocalDateTime` as PostgreSQL `timestamp without time zone`. A's active V3 requires `LEGACY_TIME_ZONE` when legacy metric rows exist and converts them to UTC instants; do not infer an unknown historical zone. Migration ownership is coordinated as V1 legacy/A coordination, V2 Part B, V3 Part A, and active V4 Part C. V4 acquires the target-table lock, validates retained rows, creates the C tables, and backfills exactly one state and version-1 policy per target in one transaction. Invalid retained rows abort the migration without normalization.
+
+The B database write service requires `MonitoringLifecyclePort` and calls it synchronously inside the row-locked write transaction. Lifecycle failures propagate and roll back the B target, audit, C rows, and common outbox together. B response/status reads and A's existing four-column `database_configs` display writer remain in place until a future metric-driven C state consumer is ready to own live status.
 
 ## Common outbox
 
@@ -35,7 +37,11 @@ Actuator health details and components are hidden. Dedicated readiness and liven
 
 The full environment contract and startup order are documented in [integration-operations.md](../docs/integration-operations.md), with security constraints in [integration-security.md](../docs/integration-security.md).
 
-The checked Stage 3 realtime handoff, including the local B candidate status,
-the A V3 `processed_events` prerequisite, native STOMP frames, and pending
-integration gates, is documented in
+The checked Stage 3 realtime handoff, including active V4, native STOMP frames,
+and the deferred metric-driven live-state boundary, is documented in
 [part-c-realtime.md](../docs/part-c-realtime.md).
+
+For activation, stop and drain old application writers before applying V4; hold
+the database lock until the migration commit completes, then start the new
+binary before allowing writes. This repository documents the handoff only; no
+shared deployment is claimed here.

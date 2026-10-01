@@ -1,6 +1,11 @@
 # C lifecycle contract handoff
 
-This handoff describes the C lifecycle implementation that is available for a future integration on the merged Actual A V3 baseline. `JdbcMonitoringLifecyclePort` is a Spring component with JDBC persistence and transactional outbox behavior, but B CRUD is not wired to it. The implementation performs no startup schema access and remains inactive until the migration and retained-target gates below pass. The activation order is B V2, verified real A V3, C V4, explicit existing-target backfill/validation, and only then B caller wiring.
+This handoff describes the active C lifecycle integration on the merged Actual A
+V3 baseline. `JdbcMonitoringLifecyclePort` is a required Spring component with
+JDBC persistence and transactional outbox behavior, and B CRUD calls it inside
+the existing write transaction. Active V4 performs the retained-target
+backfill before the new binary accepts writes. This document does not claim a
+risk evaluator, external notification delivery, or a live-status read switch.
 
 ## Canonical surface
 
@@ -85,20 +90,22 @@ final class FixedLifecyclePort implements MonitoringLifecyclePort {
 
 Do not register this fake as a production Spring bean and do not use it to claim CRUD integration.
 
-## Implementation status and caller handoff
+## Implementation status and caller contract
 
-The production implementation is `com.example.monitoring.lifecycle.adapter.JdbcMonitoringLifecyclePort`. It locks and validates the B target before reading or changing C state, then performs all C writes through the caller-bound JDBC transaction. The C rows are `monitoring_states`, `risk_policies`, incidents, rule states, notification deliveries, and outbox inserts. The lock order is fixed: lock the B `database_configs` row first with `FOR UPDATE`, verify its resulting `config_version`, `enabled`, `name`, and deleted state, then lock the C `monitoring_states` row and the target's OPEN incidents in stable `incident_id` order. This ordering lets a future B `saveAndFlush` become visible to C and avoids acquiring the C lock before the B row lock.
+The production implementation is `com.example.monitoring.lifecycle.adapter.JdbcMonitoringLifecyclePort`. It locks and validates the B target before reading or changing C state, then performs all C writes through the caller-bound JDBC transaction. The C rows are `monitoring_states`, `risk_policies`, incidents, rule states, notification deliveries, and outbox inserts. The lock order is fixed: lock the B `database_configs` row first with `FOR UPDATE`, verify its resulting `config_version`, `enabled`, `name`, and deleted state, then lock the C `monitoring_states` row and the target's OPEN incidents in stable `incident_id` order. This ordering lets the active B `saveAndFlush` become visible to C and avoids acquiring the C lock before the B row lock.
 
-The future B caller sequence is:
+The B caller sequence is:
 
 1. Start the existing writable transaction. For `CREATED`, use B's existing quota/advisory-lock path and insert the new target; there is no pre-existing row to lock. For `UPDATED`, `PAUSED`, `RESUMED`, and `DELETED`, acquire the target row lock first. The delete path must also hold the row lock; a missing or already deleted target follows B's existing API behavior and does not call C.
 2. Compute exactly one action from the mutation: `CREATED`, `UPDATED`, `PAUSED`, `RESUMED`, or `DELETED`.
 3. Mutate the B entity, including `configVersion`, `enabled`, `name`, and the soft-delete fields where applicable.
-4. Call `saveAndFlush` and use the flushed row's resulting ID, version, name, enabled flag, and deleted state. For `CREATED`, this flush inserts the row and C then locks the inserted row. The delete path must use `saveAndFlush` as well before calling C; the current B service is intentionally not changed or wired by this work.
+4. Call `saveAndFlush` and use the flushed row's resulting ID, version, name, enabled flag, and deleted state. For `CREATED`, this flush inserts the row and C then locks the inserted row. The delete path must use `saveAndFlush` as well before calling C.
 5. Record the B audit event and obtain `AuditRequestContext.Details.actorId` and `requestId`. Pass `actorId=null` only for a documented system operation and always pass a correlation UUID.
 6. Call `applyChange` once with the flushed values and the UTC `occurredAt` instant. Let every exception escape the caller transaction and return only after the call succeeds.
 
-The current B production callers were not edited, injected, or registered with this component. In particular, this document is a handoff sequence for the future integration; it is not a claim that B CRUD and C lifecycle writes are atomic in the running application today.
+The B production caller has no optional provider or no-op fallback. A lifecycle
+runtime failure reaches the service boundary and makes the whole B/C/audit/
+common-outbox transaction roll back.
 
 ## Lifecycle write behavior
 
@@ -132,39 +139,61 @@ The lifecycle adapter uses A's common `OutboxWriter` and `OutboxEventType` again
 
 Every payload includes the common envelope fields above. Status payloads include the target ID, config/state versions, enabled/deleted flags, `UNKNOWN` connection status, data freshness, null risk and metric fields, an empty OPEN-incident list after administrative closure, and `updatedAt`. Incident payloads retain the incident ID, target/name, rule and severity, opened/observed/resolved times, resolution reason, metric evidence, null `sourceEventId`, and the incremented incident version. Actor and request identifiers are not embedded in these payloads. C inserts each incident-resolution row before the final status row in the same transaction; the A publisher's cross-stream delivery ordering remains an integration validation concern. JSON serialization uses UTF-8 and rejects payloads above the byte cap before an outbox insert.
 
+These lifecycle status rows describe administrative target changes. Until a
+future `cg:risk` metric consumer maintains C's live attempt/success/latest-
+metric fields, B keeps its current status reads and A keeps the four-column
+`database_configs` display writer. The active integration does not claim risk,
+stale, or notification evaluation from these lifecycle rows.
+
 ## Validation and rollback boundary
 
 The adapter validates `databaseConfigId`, `configVersion`, `actorId` when present, `stateVersion`, and generated `incidentVersion` values as positive JavaScript-safe integers (`1..9007199254740991`). Incident IDs are UUIDs, and `sourceMetricId` is preserved and constrained by the schema rather than explicitly range-validated by this adapter. It rejects duplicate CREATE, same/lower/gapped versions, a missing C state, a flushed B-row mismatch, an action/enabled mismatch, a post-tombstone call, unsafe increments, an occurrence time before an incident's last observation, read-only or absent transactions, and an oversized event payload. It also rejects a failed state, incident, policy, or outbox row count. These failures propagate; they never become a no-op or an unreported success.
 
 The PostgreSQL integration proves both creation and existing-target rollback when an outbox trigger fails. The failure is caught inside the outer test transaction only to assert rollback behavior; the transaction still becomes rollback-only and completes with `UnexpectedRollbackException`. The resulting database snapshot proves that the B target, B audit, C state/policy/incidents/deliveries, and outbox rows return to their pre-call values.
 
-## Activation and existing-target gate
+## Active V4 and existing-target boundary
 
-Production activation is blocked until the following sequence is completed:
+The active migration order is V1, V2, V3, then
+`backend/src/main/resources/db/migration/V4__part_c_monitoring.sql`. V4 is
+forward-only and leaves V1/V2/V3 unchanged. It locks `database_configs`, adds
+the two named composite keys before C foreign keys, rejects the first invalid
+retained row with a target-identifying diagnostic, and rolls back all V4 DDL
+and data when validation or a postcondition fails.
 
-1. B V2 is present and its target/session prerequisites are verified. The current B V2 does not provide the required `UNIQUE (sid, user_id)` key.
-2. The real A V3 is applied and verified. The current active inventory is V1, V2, and V3; V3 owns `event_outbox` and `processed_events` and converts metric times to `Instant`/`TIMESTAMPTZ`, but it still lacks `UNIQUE (id, database_config_id)` on `metric_data`.
-3. C V4 is applied only after those prerequisites are present. The staged file is `backend/schema/part-c/V4__part_c_monitoring.sql`; C V4 is not registered as an active production migration in this handoff.
-4. An integration owner inventories every retained B target and performs an explicit backfill and validation decision. For a target that can be initialized consistently, create its state/policy once with the resulting retained configuration version and an integration-owner activation time, idempotently. For a target whose history cannot be reconstructed safely, refuse activation and remediate it explicitly. Do not route an existing target with `configVersion>1` through the C `CREATED` action, because `CREATED` is version-1-only. Reject duplicates, gaps, deleted tombstones, and any target lacking exactly one state and one policy.
-5. Only after the inventory, backfill/refusal decisions, and one-state/one-policy validation succeed may B wire the caller sequence above.
+For every retained target, V4 inserts exactly one state and one version-1
+default policy at the target's actual `config_version`. Enabled nondeleted
+targets receive `NO_DATA` and one shared
+`date_trunc('milliseconds', transaction_timestamp())` activation epoch;
+disabled or deleted targets receive `PAUSED` with no activation. Existing
+metrics remain stored but do not seed C attempt/success/latest-metric fields,
+and migration initialization writes no synthetic lifecycle outbox events. V4
+never routes a retained target through `CREATED`, and it never silently repairs
+an invalid row.
 
-There is no C startup backfill, automatic activation flag, fallback schema creation, implicit omission, or production activation routine. The lifecycle integration fixture uses Actual A V3's `event_outbox` and `processed_events`, adding only the missing B/A composite keys and the C schema. The schema-only fixture under `backend/schema/part-c/test-fixtures` is now a disposable mirror of the Actual A 11-column outbox and `processed_events` shape; the schema receipt verifies that mirror separately from real Flyway V1/V2/V3 databases. It is not B V2, not A V3, and must not be treated as a production migration.
+The inspection probes under `backend/schema/part-c/probes` validate the active
+seven-table and common outbox shape; they do not create a fallback schema or
+represent B V2, A V3, or a production migration. No startup repair or runtime
+activation flag is used.
 
-## Current Actual-A core verification
+Before rollout, stop and drain old application writers. Keep the migration lock
+until the migration commit completes, then start the new binary before opening
+writes. No shared deployment was performed by this handoff.
 
-The current common-outbox implementation is verified by the focused receipt at
-`.omo/evidence/c-lifecycle-next/actual-a/core-lifecycle-reconciliation.md` for
-commit `3ae41db5b3a2e329119b36e2d17ad8714596c253`. Its five selected test
-classes executed 28 tests with 0 failures, 0 errors, and 0 skips, including six
-real-PostgreSQL lifecycle scenarios on V1/V2/V3. The receipt records actual
-status and incident stream routing, `database:<id>` ordering keys, common
-envelope timestamps, deterministic sequence/order assertions, all five actions,
-and caught CREATE/UPDATE rollback snapshots. This is focused core evidence;
-Normal, Redis, native, final source-manifest, B caller wiring, V4 activation,
-and retained-target backfill remain separate gates.
+## Historical Actual-A core verification
+
+The earlier common-outbox receipt at
+`.omo/evidence/c-lifecycle-next/actual-a/core-lifecycle-reconciliation.md` is
+bound to commit `3ae41db5b3a2e329119b36e2d17ad8714596c253`. It recorded five
+selected classes and 28 tests on the pre-V4 V1/V2/V3 baseline, including
+status/incident routing, ordering keys, envelope timestamps, all five actions,
+and caught CREATE/UPDATE rollback snapshots. That receipt is retained for
+traceability only; it does not certify the active V4 migration, retained-target
+backfill, or mandatory B caller on the current candidate.
 
 ## Historical verification boundary
 
 Task 4's pre-Actual-A PostgreSQL receipt is bound to commit `13e0f09e8eb6d8bd83b639ccffe15e681505fe0e` and records six scenarios with six tests, zero failures, zero errors, and zero skips: V1/V2 startup with missing-V4 rollback; provisional prerequisites and enabled/disabled CREATE defaults; all five actions with policy preservation, resets, four rule closures, pending cancellation, and insertion order; invalid/version/type/target/post-delete guards; safe-integer and payload-overflow guards; and forced outbox rollback for both CREATE and an existing-target UPDATE. The receipt is `.omo/evidence/c-lifecycle-next/task-4-part-c-lifecycle-implementation.xml` in the ignored attempt directory; the teammate-facing selector is `com.example.monitoring.lifecycle.integration.MonitoringLifecyclePostgresIntegrationTest`. This historical receipt is preserved for traceability and is not current Actual-A green evidence; current reconciliation tests must be recorded separately.
 
-The implementation and historical integration tests are evidence for the C boundary only. They do not prove B production CRUD wiring, production V4 activation, or a completed existing-target backfill. Those remain explicit integration-owner gates.
+The implementation and historical integration tests are evidence for the C
+boundary at their recorded commits only. Current active-V4 and B/C integration
+claims must use the fresh exact-SHA receipts under `.omo/evidence/c-v4-finish/`.

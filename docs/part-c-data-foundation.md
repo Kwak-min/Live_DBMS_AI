@@ -1,39 +1,43 @@
 # Part C data foundation
 
-This document defines the Stage 2 storage boundary for Part C. It stages schema
-only; it does not activate Flyway V4 or implement policy evaluation, incident
-services, notification workers, repositories, or APIs.
+This document defines the activated V4 storage boundary for Part C. It records
+the durable state, policy, incident, recipient, and delivery schema used by the
+current integration. V4 does not claim a risk-evaluation engine, notification
+delivery worker, or a live-status read switch.
 
 ## Current candidate status
 
-This remains the Stage 2 foundation record on the merged Actual A baseline. The
-active Flyway inventory is A V1, B V2, and A V3. V3 owns the production
-`event_outbox` and `processed_events` tables and migrates metric timestamps to
-`TIMESTAMPTZ`, represented by `Instant` in the A model. The checked B V2
-migration still does not expose `UNIQUE (sid, user_id)`, and V3 still does not
-expose `UNIQUE (id, database_config_id)` on `metric_data`; those two composite
-keys are the remaining prerequisites for staged V4. Staged V4 persists nullable
-`activation_at` and enforces the enabled/nondeleted and disabled/deleted
-lifecycle rules around that value. Production V4 registration, upgrade
-verification, and activation backfill remain blocked until both keys and the
-retained-target decisions are delivered and verified. See [the Stage 3 realtime
-handoff](part-c-realtime.md) for the current refs, commands, and verification
-boundaries.
+The active Flyway inventory is A V1, B V2, A V3, and C V4. V3 owns the
+production `event_outbox` and `processed_events` tables and migrates metric
+timestamps to `TIMESTAMPTZ`, represented by `Instant` in the A model. V4 adds
+the named `UNIQUE (sid, user_id)` and `UNIQUE (id, database_config_id)` keys
+forward-only, then creates the seven C tables and initializes every retained
+target transactionally. It stores one state and one version-1 default policy per
+target at the target's actual `config_version`.
+
+V4 uses one `date_trunc('milliseconds', transaction_timestamp())` activation
+epoch for enabled, nondeleted targets. Disabled and deleted targets are
+initialized as `PAUSED` without an activation time. Historical A metrics remain
+stored but never seed C's attempt, success, or latest-metric fields, and the
+initialization emits no synthetic lifecycle outbox events. A retained row with
+an unsafe ID/version or an enabled soft-deleted state aborts the migration
+without normalization. See [the realtime handoff](part-c-realtime.md) for the
+live-state boundary and runtime handoff.
 
 ## Ownership and prerequisites
 
-| Area | Owner | Stage 2 boundary |
+| Area | Owner | Active integration boundary |
 | --- | --- | --- |
-| Accounts and sessions | B | `users(id)` and `auth_sessions(sid,user_id)`; V2 must expose `UNIQUE (sid,user_id)` for session-owner integrity |
+| Accounts and sessions | B | `users(id)` and `auth_sessions(sid,user_id)`; active V4 adds the named composite key for session-owner integrity |
 | Monitored targets | B | `database_configs(id)`; targets are soft-deleted and their IDs are not reused |
-| Metrics | A | `metric_data(id,database_config_id)`; Actual A V3 supplies the table but still needs `UNIQUE (id,database_config_id)` for target-scoped metric references |
-| Reliable events | A common | Actual A V3 owns `event_outbox` and `processed_events`; C writes/reads them through the common interfaces and does not duplicate them. The lifecycle fixture adds only the missing composite keys and C schema. |
-| Status, risk, incidents, recipients, deliveries | C | The seven tables in the staged V4 |
+| Metrics | A | `metric_data(id,database_config_id)`; V4 adds the named target-scoped composite key before C foreign keys |
+| Reliable events | A common | Actual A V3 owns `event_outbox` and `processed_events`; C uses the common interfaces and does not duplicate them. Migration initialization emits no lifecycle events. |
+| Status, risk, incidents, recipients, deliveries | C | The seven tables in active V4; risk evaluation and external delivery remain future consumers/workers |
 | Recipient encryption service and key ring | B security boundary | C persists only key version, 12-byte nonce, and ciphertext-with-tag returned by the shared encryption boundary |
 
-The prerequisite SQL under `backend/schema/part-c/test-fixtures` is deliberately
-test-only. Production V4 has foreign keys to the real V2/V3 tables and contains no
-fallback or fake account, session, target, metric, outbox, or dedup tables.
+The SQL under `backend/schema/part-c/probes` is inspection-only. Production V4
+has foreign keys to the real V2/V3 tables and contains no fallback or fake
+account, session, target, metric, outbox, or dedup tables.
 
 ## Seven-table model
 
@@ -78,13 +82,19 @@ identity/deduplication; they are not reversible endpoint storage.
 
 ## Activation and migration ownership
 
-V4 remains at `backend/schema/part-c/V4__part_c_monitoring.sql` until the two
-missing V2/V3 composite keys are integrated. The A migration owner controls
-version registration and must move the unchanged file into Flyway's active
-migration directory only after checking the stable prerequisite keys, an empty
-V1-to-V4 apply, and a V3-to-V4 upgrade. The activation backfill must also be
-planned against the Actual A V3 state before V4 is registered. Part C must not
-patch V2/V3 from this staged migration.
+`backend/src/main/resources/db/migration/V4__part_c_monitoring.sql` is the sole
+production V4 path. It is forward-only and does not edit V1, V2, or V3. Before
+creating C foreign keys, it acquires `SHARE ROW EXCLUSIVE` on
+`database_configs`, verifies the retained rows, and declares both required
+composite keys. The first invalid retained target raises a target-identifying
+diagnostic; the transaction rolls back all V4 DDL and backfill rows.
+
+The backfill validates postconditions for target/state/policy counts, exact
+target IDs and versions, state coherence, and policy defaults. It uses one
+millisecond transaction epoch for all applicable activations. It does not call
+the lifecycle `CREATED` action, seed from historical metrics, or write
+migration outbox events. Any later `cg:risk` consumer must reject metrics from
+before the activation epoch when deciding current C state.
 
 The integrated application keeps the Stage 3 realtime beans disabled by default with
 `monitoring.realtime.enabled: ${REALTIME_ENABLED:false}`. Set `REALTIME_ENABLED=true`
@@ -138,7 +148,7 @@ must not drive current freshness or risk evaluation, and it must never be publis
 to a shared real `stream:metrics` key. The legacy v0 publisher has a different JSON
 shape and must not share a stream or consumer group with the v1 fixture.
 
-Docker was unavailable for this Stage 2 check, so the Compose command above is a
+Docker was unavailable for this handoff check, so the Compose command above is a
 handoff rather than a Docker execution claim. The same fixture completed an object
 equal roundtrip through the official Redis 7.4.11 binary on isolated loopback port
 6398: XRANGE returned one `payload` field, XDEL returned 1, the dedicated key was
@@ -156,9 +166,8 @@ with tombstone reuse, delivery deduplication, enum/version/count/safe-ID checks,
 and metric-retention evidence. Each test removed the probe schema in its cleanup
 path, the embedded server closed in suite teardown, and cleanup SQL confirmed
 that `part_c_probe` was gone. This historical receipt is preserved for
-traceability; it is not current Actual-A green evidence. The schema-only fixture
-now mirrors the Actual A V3 11-column outbox and `processed_events` shape, while
-the current schema receipt separately verifies real Flyway V1/V2/V3 databases
-with only the missing composite keys and staged C schema. The lifecycle
-integration uses the real A tables and adds only those missing keys plus C
-schema.
+traceability; it is not current Actual-A green evidence. The current constraint
+probe verifies the real common outbox shape, active V4 tables, and cross-target
+metric references. Those receipts are historical probe evidence; the active
+integration uses the real V1/V2/V3 tables, active V4, strict retained-row
+validation, and no historical metric or outbox seeding.

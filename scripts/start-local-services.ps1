@@ -7,18 +7,17 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Push-Location -LiteralPath $repositoryRoot
 try {
-    & docker compose version | Out-Null
+    & docker compose -f docker-compose.yml version | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw 'Docker Compose is required to start the local services.'
     }
 
-    $arguments = @('compose')
+    $services = @('postgres', 'redis')
     if ($WithMariaDb) {
-        $arguments += @('--profile', 'target-db')
+        $services += 'mariadb-target'
     }
-    $arguments += @('up', '-d', '--wait')
 
-    & docker @arguments
+    & docker compose -f docker-compose.yml up -d --wait @services
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose exited with code $LASTEXITCODE."
     }
