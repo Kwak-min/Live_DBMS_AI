@@ -152,6 +152,32 @@ INSERT INTO monitoring_states (
     '2026-09-29T00:00:10Z'
 );
 
+DO $probe$
+DECLARE
+    rejected BOOLEAN := FALSE;
+    actual_state TEXT;
+BEGIN
+    BEGIN
+        UPDATE monitoring_states
+        SET latest_metric_id = 302
+        WHERE database_config_id = 101;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS actual_state = RETURNED_SQLSTATE;
+        IF actual_state = '23503' THEN
+            rejected := TRUE;
+        ELSE
+            RAISE;
+        END IF;
+    END;
+
+    IF NOT rejected THEN
+        RAISE EXCEPTION 'monitoring state accepted a metric owned by another target';
+    END IF;
+
+    INSERT INTO part_c_probe_results VALUES ('cross_target_metric_rejected');
+END
+$probe$;
+
 INSERT INTO risk_policies (
     database_config_id,
     version,
@@ -995,8 +1021,8 @@ DECLARE
     scenario_count INTEGER;
 BEGIN
     SELECT count(*) INTO scenario_count FROM part_c_probe_results;
-    IF scenario_count <> 21 THEN
-        RAISE EXCEPTION 'expected 21 passing scenarios, found %', scenario_count;
+    IF scenario_count <> 22 THEN
+        RAISE EXCEPTION 'expected 22 passing scenarios, found %', scenario_count;
     END IF;
 END
 $probe$;

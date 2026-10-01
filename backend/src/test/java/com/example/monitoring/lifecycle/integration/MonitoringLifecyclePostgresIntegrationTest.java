@@ -21,10 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -32,10 +29,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import javax.sql.DataSource;
 import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -72,8 +66,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
     private static final String CLIENT_IP = "127.0.0.1";
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
     private static final String DB_KEYS = "{\"1\":\"" + KEY + "\"}";
-    private static final Path REPOSITORY = locateRepository();
-    private static final Path STAGED_V4 = REPOSITORY.resolve("backend/schema/part-c/V4__part_c_monitoring.sql");
     private static final String PREVIOUS_ACTIVE_KEY_VERSION = System.getProperty("DB_CONFIG_ACTIVE_KEY_VERSION");
     private static final String PREVIOUS_ENCRYPTION_KEYS = System.getProperty("DB_CONFIG_ENCRYPTION_KEYS");
     private static final String PREVIOUS_LEGACY_TIME_ZONE = System.getProperty("LEGACY_TIME_ZONE");
@@ -116,9 +108,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
     private ApplicationContext applicationContext;
 
     @Autowired
-    private DataSource dataSource;
-
-    @Autowired
     private JdbcTemplate jdbc;
 
     @Autowired
@@ -142,56 +131,35 @@ class MonitoringLifecyclePostgresIntegrationTest {
     private TransactionTemplate transactions;
 
     @BeforeEach
-    void resetToActiveV1V2V3() {
+    void resetActiveV4() {
         transactions = new TransactionTemplate(transactionManager);
-        executeScript(new ClassPathResource("lifecycle/cleanup-provisional-lifecycle.sql"));
-        jdbc.update("DELETE FROM audit_logs");
-        jdbc.update("DELETE FROM metric_data");
-        jdbc.update("DELETE FROM database_configs");
+        cleanupTestFixtures();
+        installOutboxLedger();
     }
 
     @AfterEach
-    void removeProvisionalFixture() {
-        executeScript(new ClassPathResource("lifecycle/cleanup-provisional-lifecycle.sql"));
-        jdbc.update("DELETE FROM audit_logs");
-        jdbc.update("DELETE FROM metric_data");
-        jdbc.update("DELETE FROM database_configs");
+    void removeTestFixtures() {
+        cleanupTestFixtures();
     }
 
     @Test
-    void v1V2V3ApplicationStartsWithLifecycleBeanAndMissingV4InvocationRollsBackBAndAudit() {
+    void applicationStartsWithActiveV4AndRequiredLifecycleSchema() {
         assertThat(applicationContext.getBean(MonitoringLifecyclePort.class)).isSameAs(lifecycle);
         assertThat(Arrays.stream(flyway.info().applied())
                 .map(info -> info.getVersion().getVersion()))
-                .containsExactly("1", "2", "3");
-        assertThat(tableExists("monitoring_states")).isFalse();
+                .containsExactly("1", "2", "3", "4");
+        assertThat(tableExists("monitoring_states")).isTrue();
         assertThat(tableExists("event_outbox")).isTrue();
         assertThat(tableExists("processed_events")).isTrue();
-        assertThat(hasConstraint("auth_sessions", "auth_sessions_sid_user_unique")).isFalse();
-
-        AtomicReference<Throwable> lifecycleFailure = new AtomicReference<>();
-        Throwable commitFailure = catchThrowable(() -> transactions.executeWithoutResult(ignored -> {
-            DatabaseConfig saved = databaseConfigs.saveAndFlush(target("missing-v4", true, 1L));
-            audit(saved, AuditAction.DATABASE_CREATED, 1L);
-            try {
-                lifecycle.applyChange(change(saved, TargetChangeType.CREATED, at(0), 1L));
-            } catch (RuntimeException exception) {
-                lifecycleFailure.set(exception);
-            }
-        }));
-
-        assertThat(lifecycleFailure.get()).isNotNull();
-        assertThat(rootMessage(lifecycleFailure.get())).contains("monitoring_states");
-        assertThat(commitFailure).isInstanceOf(UnexpectedRollbackException.class);
+        assertThat(hasConstraint("auth_sessions", "auth_sessions_sid_user_unique")).isTrue();
+        assertThat(hasConstraint("metric_data", "metric_data_id_target_unique")).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM database_configs", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Long.class)).isZero();
-        proof("missing-v4", "migrations=1,2,3", "targetRows=0", "auditRows=0", "rollbackOnly=true");
+        proof("active-v4", "migrations=1,2,3,4", "targetRows=0", "auditRows=0");
     }
 
     @Test
     void actualV3PrerequisitesAndCreatedTargetsHaveExactDefaultsAndPayloads() throws Exception {
-        assertThat(hasConstraint("auth_sessions", "auth_sessions_sid_user_unique")).isFalse();
-        installProvisionalLifecycleSchema();
         assertActualPrerequisites();
 
         long enabledId = createWithLifecycle("enabled-target", true, at(0));
@@ -216,7 +184,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     @Test
     void fiveActionsPreservePolicyResetStateCloseFourRulesCancelPendingAndOrderExactEvents() throws Exception {
-        installProvisionalLifecycleSchema();
         long targetId = createWithLifecycle("original-name", true, at(0));
         JsonNode customizedRules = objectMapper.readTree("""
                 [
@@ -290,7 +257,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     @Test
     void invalidVersionTypeTargetAndPostDeleteChangesLeaveEveryStoreUnchanged() {
-        installProvisionalLifecycleSchema();
         long targetId = createWithLifecycle("guard-target", true, at(0));
 
         assertRejectedWithoutRowChanges(() -> transactions.executeWithoutResult(ignored -> {
@@ -329,7 +295,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     @Test
     void unsafeIdentifiersStateIncidentAndPayloadOverflowLeaveEveryStoreUnchanged() {
-        installProvisionalLifecycleSchema();
         long stateOverflowId = createWithLifecycle("state-overflow", true, at(0));
         jdbc.update("UPDATE monitoring_states SET state_version = ? WHERE database_config_id = ?",
                 MAX_SAFE_INTEGER, stateOverflowId);
@@ -367,7 +332,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     @Test
     void forcedOutboxFailureRollsBackBJpaAuditLifecycleAndOutboxEvenWhenCaught() {
-        installProvisionalLifecycleSchema();
         installForcedOutboxFailureTrigger();
 
         AtomicReference<Throwable> lifecycleFailure = new AtomicReference<>();
@@ -429,12 +393,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 "snapshotUnchanged=true", "openIncidents=4", "pendingDeliveries=4", "auditRows=1", "outboxRows=1");
     }
 
-    private void installProvisionalLifecycleSchema() {
-        executeScript(new ClassPathResource("lifecycle/provisional-v1-v2-prerequisites.sql"));
-        executeScript(new FileSystemResource(STAGED_V4));
-        installOutboxLedger();
-    }
-
     private void installOutboxLedger() {
         jdbc.execute("""
                 CREATE TABLE lifecycle_outbox_insert_ledger (
@@ -459,6 +417,19 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 AFTER INSERT ON event_outbox
                 FOR EACH ROW EXECUTE FUNCTION lifecycle_capture_outbox_insert()
                 """);
+    }
+
+    private void cleanupTestFixtures() {
+        jdbc.execute("DROP TABLE IF EXISTS lifecycle_outbox_insert_ledger CASCADE");
+        jdbc.execute("DROP FUNCTION IF EXISTS lifecycle_capture_outbox_insert() CASCADE");
+        jdbc.execute("DROP FUNCTION IF EXISTS lifecycle_force_outbox_failure() CASCADE");
+        for (String table : List.of(
+                "notification_deliveries", "push_subscriptions", "notification_webhooks",
+                "risk_rule_states", "incidents", "risk_policies", "monitoring_states",
+                "event_outbox", "processed_events", "audit_logs", "metric_data",
+                "database_configs")) {
+            jdbc.update("DELETE FROM " + table);
+        }
     }
 
     private void installForcedOutboxFailureTrigger() {
@@ -1005,12 +976,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
                 """, Boolean.class, table, constraint));
     }
 
-    private void executeScript(org.springframework.core.io.Resource resource) {
-        ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-        populator.addScript(resource);
-        populator.execute(dataSource);
-    }
-
     private Instant instant(Object value) {
         return value == null ? null : ((Timestamp) value).toInstant();
     }
@@ -1041,17 +1006,6 @@ class MonitoringLifecyclePostgresIntegrationTest {
 
     private void proof(String scenario, String... observables) {
         System.out.println("LIFECYCLE_POSTGRES_PROOF scenario=" + scenario + " " + String.join(" ", observables));
-    }
-
-    private static Path locateRepository() {
-        Path current = Path.of(System.getProperty("user.dir")).toAbsolutePath();
-        while (current != null) {
-            if (Files.exists(current.resolve("backend/schema/part-c/V4__part_c_monitoring.sql"))) {
-                return current;
-            }
-            current = current.getParent();
-        }
-        throw new IllegalStateException("Unable to locate repository root");
     }
 
     private static void restoreProperty(String name, String value) {

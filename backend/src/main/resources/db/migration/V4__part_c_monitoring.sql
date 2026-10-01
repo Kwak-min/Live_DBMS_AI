@@ -1,3 +1,33 @@
+LOCK TABLE database_configs IN SHARE ROW EXCLUSIVE MODE;
+
+DO $v4_validate$
+DECLARE
+    offending RECORD;
+BEGIN
+    SELECT id, config_version, enabled, deleted_at IS NOT NULL AS deleted
+    INTO offending
+    FROM database_configs
+    WHERE id NOT BETWEEN 1 AND 9007199254740991
+       OR config_version NOT BETWEEN 1 AND 9007199254740991
+       OR (deleted_at IS NOT NULL AND enabled)
+    ORDER BY id
+    LIMIT 1;
+
+    IF FOUND THEN
+        RAISE EXCEPTION
+            'Unsafe retained database_config id=%, config_version=%, enabled=%, deleted=%',
+            offending.id, offending.config_version, offending.enabled, offending.deleted
+            USING ERRCODE = 'P0001';
+    END IF;
+END
+$v4_validate$;
+
+ALTER TABLE auth_sessions
+    ADD CONSTRAINT auth_sessions_sid_user_unique UNIQUE (sid, user_id);
+
+ALTER TABLE metric_data
+    ADD CONSTRAINT metric_data_id_target_unique UNIQUE (id, database_config_id);
+
 CREATE TABLE monitoring_states (
     database_config_id BIGINT PRIMARY KEY,
     config_version BIGINT NOT NULL,
@@ -332,3 +362,166 @@ CREATE INDEX notification_deliveries_created_order_idx
 CREATE INDEX notification_deliveries_pending_due_idx
     ON notification_deliveries (next_attempt_at, id)
     WHERE status = 'PENDING';
+
+INSERT INTO monitoring_states (
+    database_config_id,
+    config_version,
+    state_version,
+    enabled,
+    deleted,
+    connection_status,
+    data_freshness,
+    risk_level,
+    activation_at,
+    last_attempt_at,
+    last_success_at,
+    latest_metric_id,
+    updated_at
+)
+SELECT
+    id,
+    config_version,
+    1,
+    enabled,
+    deleted_at IS NOT NULL,
+    'UNKNOWN',
+    CASE WHEN enabled AND deleted_at IS NULL THEN 'NO_DATA' ELSE 'PAUSED' END,
+    NULL,
+    CASE
+        WHEN enabled AND deleted_at IS NULL
+            THEN date_trunc('milliseconds', transaction_timestamp())
+        ELSE NULL
+    END,
+    NULL,
+    NULL,
+    NULL,
+    date_trunc('milliseconds', transaction_timestamp())
+FROM database_configs;
+
+INSERT INTO risk_policies (
+    database_config_id,
+    version,
+    rules,
+    stale_after_seconds,
+    notification_cooldown_seconds,
+    created_at,
+    updated_at
+)
+SELECT
+    id,
+    1,
+    '[
+      {
+        "ruleId": "CONNECTION_RATIO",
+        "metricName": "activeConnectionsRatio",
+        "operator": "GTE",
+        "warningThreshold": 0.80,
+        "criticalThreshold": 0.90,
+        "fatalThreshold": 0.95,
+        "sustainSeconds": 15,
+        "recoverySeconds": 15,
+        "enabled": true
+      },
+      {
+        "ruleId": "SLOW_QUERY_RATE",
+        "metricName": "slowQueriesPerSecond",
+        "operator": "GTE",
+        "warningThreshold": 1.0,
+        "criticalThreshold": 5.0,
+        "fatalThreshold": null,
+        "sustainSeconds": 15,
+        "recoverySeconds": 15,
+        "enabled": true
+      }
+    ]'::jsonb,
+    30,
+    300,
+    date_trunc('milliseconds', transaction_timestamp()),
+    date_trunc('milliseconds', transaction_timestamp())
+FROM database_configs;
+
+DO $v4_postconditions$
+DECLARE
+    migration_instant TIMESTAMPTZ := date_trunc('milliseconds', transaction_timestamp());
+    target_count BIGINT;
+    state_count BIGINT;
+    policy_count BIGINT;
+BEGIN
+    SELECT count(*) INTO target_count FROM database_configs;
+    SELECT count(*) INTO state_count FROM monitoring_states;
+    SELECT count(*) INTO policy_count FROM risk_policies;
+
+    IF state_count <> target_count OR policy_count <> target_count THEN
+        RAISE EXCEPTION
+            'V4 backfill cardinality mismatch: targets=%, states=%, policies=%',
+            target_count, state_count, policy_count;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM database_configs target
+        LEFT JOIN monitoring_states state
+            ON state.database_config_id = target.id
+        WHERE state.database_config_id IS NULL
+           OR state.config_version IS DISTINCT FROM target.config_version
+           OR state.state_version <> 1
+           OR state.enabled IS DISTINCT FROM target.enabled
+           OR state.deleted IS DISTINCT FROM (target.deleted_at IS NOT NULL)
+           OR state.connection_status <> 'UNKNOWN'
+           OR state.data_freshness IS DISTINCT FROM CASE
+                WHEN target.enabled AND target.deleted_at IS NULL THEN 'NO_DATA'
+                ELSE 'PAUSED'
+              END
+           OR state.risk_level IS NOT NULL
+           OR state.last_attempt_at IS NOT NULL
+           OR state.last_success_at IS NOT NULL
+           OR state.latest_metric_id IS NOT NULL
+           OR state.activation_at IS DISTINCT FROM CASE
+                WHEN target.enabled AND target.deleted_at IS NULL THEN migration_instant
+                ELSE NULL
+              END
+           OR state.updated_at IS DISTINCT FROM migration_instant
+    ) THEN
+        RAISE EXCEPTION 'V4 monitoring state backfill postcondition failed';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM database_configs target
+        LEFT JOIN risk_policies policy
+            ON policy.database_config_id = target.id
+        WHERE policy.database_config_id IS NULL
+           OR policy.version <> 1
+           OR policy.rules IS DISTINCT FROM '[
+                {
+                  "ruleId": "CONNECTION_RATIO",
+                  "metricName": "activeConnectionsRatio",
+                  "operator": "GTE",
+                  "warningThreshold": 0.80,
+                  "criticalThreshold": 0.90,
+                  "fatalThreshold": 0.95,
+                  "sustainSeconds": 15,
+                  "recoverySeconds": 15,
+                  "enabled": true
+                },
+                {
+                  "ruleId": "SLOW_QUERY_RATE",
+                  "metricName": "slowQueriesPerSecond",
+                  "operator": "GTE",
+                  "warningThreshold": 1.0,
+                  "criticalThreshold": 5.0,
+                  "fatalThreshold": null,
+                  "sustainSeconds": 15,
+                  "recoverySeconds": 15,
+                  "enabled": true
+                }
+              ]'::jsonb
+           OR policy.stale_after_seconds <> 30
+           OR policy.notification_cooldown_seconds <> 300
+           OR policy.created_at IS DISTINCT FROM migration_instant
+           OR policy.updated_at IS DISTINCT FROM migration_instant
+    ) THEN
+        RAISE EXCEPTION 'V4 risk policy backfill postcondition failed';
+    END IF;
+END
+$v4_postconditions$;

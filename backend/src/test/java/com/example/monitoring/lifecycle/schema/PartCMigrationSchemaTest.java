@@ -1,7 +1,11 @@
 package com.example.monitoring.lifecycle.schema;
 
+import com.example.monitoring.lifecycle.adapter.LifecyclePolicyContract;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -13,7 +17,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -21,8 +24,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
-class PartCStagedSchemaTest {
+class PartCMigrationSchemaTest {
 
     private static final Path REPOSITORY = locateRepository();
     private static final Path SCHEMA_ROOT = REPOSITORY.resolve("backend/schema/part-c");
@@ -53,91 +57,23 @@ class PartCStagedSchemaTest {
     }
 
     @Test
-    void stagedV4FailsWithoutAuthSessionOwnerKey() throws Exception {
-        ActualDatabase database = prepareActualDatabase();
-        try {
-            seedActualPrerequisites(database.dataSource());
-            addActualCompositeKeys(database.dataSource(), false, true);
-            SQLException failure = org.junit.jupiter.api.Assertions.assertThrows(
-                    SQLException.class, () -> applyStagedV4(database.dataSource()));
-
-            assertThat(failure.getSQLState()).isEqualTo("42830");
-        } finally {
-            dropActualDatabase(database);
-        }
-    }
-
-    @Test
-    void stagedV4FailsWithoutMetricTargetKey() throws Exception {
-        ActualDatabase database = prepareActualDatabase();
-        try {
-            seedActualPrerequisites(database.dataSource());
-            addActualCompositeKeys(database.dataSource(), true, false);
-            SQLException failure = org.junit.jupiter.api.Assertions.assertThrows(
-                    SQLException.class, () -> applyStagedV4(database.dataSource()));
-
-            assertThat(failure.getSQLState()).isEqualTo("42830");
-        } finally {
-            dropActualDatabase(database);
-        }
-    }
-
-    @Test
-    void preV4ProbeFailsBeforeMonitoringTablesExistOnActualV3() throws Exception {
-        ActualDatabase database = prepareActualDatabase();
-        try {
-            SQLException failure = org.junit.jupiter.api.Assertions.assertThrows(
-                    SQLException.class,
-                    () -> executeScript(database.dataSource(), "probes/pre-v4-missing-schema.sql", "public"));
-
-            assertThat(failure.getSQLState()).isEqualTo("42P01");
-        } finally {
-            dropActualDatabase(database);
-        }
-    }
-
-    @Test
-    void isolatedFixtureV4AndConstraintProbePassWithDisposablePrerequisites() throws Exception {
-        prepareFixture();
-        try {
-            applyStagedV4(dataSource, "part_c_probe");
-            executeScript("probes/catalog.sql");
-            assertMonitoringStateActivationColumn(dataSource, "part_c_probe");
-            assertPartCTableInventory(dataSource, "part_c_probe");
-            assertOutboxShape(dataSource, "part_c_probe");
-            ProbeResult result = runConstraintProbe(dataSource, "part_c_probe");
-
-            assertThat(result.passedScenarios()).isEqualTo(21);
-            assertThat(result.scenarios()).contains(
-                    "activation_at_nullable_timestamptz",
-                    "event_outbox_actual_eleven_columns",
-                    "disabled_activation_coherent",
-                    "deleted_state_activation_coherent",
-                    "enabled_activation_required",
-                    "disabled_activation_must_be_null");
-        } finally {
-            cleanupProbe();
-        }
-    }
-
-    @Test
-    void actualV3AndStagedV4PassWithOnlyMissingCompositeKeysAdded() throws Exception {
+    void freshV4HasRequiredKeysAndPreservesConstraintProbes() throws Exception {
         ActualDatabase database = prepareActualDatabase();
         try {
             seedActualPrerequisites(database.dataSource());
             assertActualAContract(database.dataSource());
-            addActualCompositeKeys(database.dataSource(), true, true);
-            applyStagedV4(database.dataSource());
-            executeScript(database.dataSource(), "probes/catalog.sql", "public");
+            assertRequiredParentKeys(database.dataSource());
             assertMonitoringStateActivationColumn(database.dataSource(), "public");
             assertPartCTableInventory(database.dataSource(), "public");
             assertOutboxShape(database.dataSource(), "public");
             ProbeResult result = runConstraintProbe(database.dataSource(), "public");
 
-            assertThat(result.passedScenarios()).isEqualTo(21);
+            assertThat(result.passedScenarios()).isEqualTo(22);
             assertThat(result.scenarios()).contains(
                     "activation_at_nullable_timestamptz",
                     "event_outbox_actual_eleven_columns",
+                    "cross_target_metric_rejected",
+                    "subscription_session_owner_enforced",
                     "disabled_activation_coherent",
                     "deleted_state_activation_coherent",
                     "enabled_activation_required",
@@ -148,7 +84,7 @@ class PartCStagedSchemaTest {
     }
 
     @Test
-    void activeMigrationInventoryKeepsActualV1V2V3Only() throws IOException {
+    void activeMigrationInventoryIsExactlyV1ThroughV4() throws IOException {
         List<String> names = new ArrayList<>();
         collectMigrationNames(names, REPOSITORY.resolve("backend/src/main/resources/db/migration"));
         collectMigrationNames(names, REPOSITORY.resolve("backend/src/main/java/db/migration"));
@@ -157,8 +93,106 @@ class PartCStagedSchemaTest {
         assertThat(names).containsExactly(
                 "V1__baseline_existing_schema.sql",
                 "V2__part_b_auth_and_encrypt_database_credentials.java",
-                "V3__part_a_metrics_and_outbox.java");
-        assertThat(Files.exists(SCHEMA_ROOT.resolve("V4__part_c_monitoring.sql"))).isTrue();
+                "V3__part_a_metrics_and_outbox.java",
+                "V4__part_c_monitoring.sql");
+        assertThat(Files.exists(SCHEMA_ROOT.resolve("V4__part_c_monitoring.sql"))).isFalse();
+    }
+
+    @Test
+    void activeV4BackfillsRetainedTargetsAtCurrentVersions() throws Exception {
+        ActualDatabase database = prepareActualDatabaseAt("3");
+        try {
+            seedRetainedTargets(database.dataSource());
+            long metricCount = countRows(database.dataSource(), "metric_data");
+            long outboxCount = countRows(database.dataSource(), "event_outbox");
+
+            var migration = Flyway.configure().dataSource(database.dataSource()).load().migrate();
+
+            assertThat(migration.migrationsExecuted).isEqualTo(1);
+            assertThat(Flyway.configure().dataSource(database.dataSource()).load().info()
+                    .current().getVersion().getVersion()).isEqualTo("4");
+            List<String> states = withConnection(database.dataSource(), connection -> {
+                List<String> result = new ArrayList<>();
+                try (Statement statement = connection.createStatement();
+                     ResultSet rows = statement.executeQuery("""
+                             SELECT database_config_id, config_version, state_version, enabled, deleted,
+                                    connection_status, data_freshness, activation_at IS NOT NULL AS active,
+                                    risk_level IS NULL AND last_attempt_at IS NULL AND last_success_at IS NULL
+                                        AND latest_metric_id IS NULL AS observation_empty
+                             FROM monitoring_states
+                             ORDER BY database_config_id
+                             """)) {
+                    while (rows.next()) {
+                        result.add("%d:%d:%d:%s:%s:%s:%s:%s:%s".formatted(
+                                rows.getLong("database_config_id"), rows.getLong("config_version"),
+                                rows.getLong("state_version"), rows.getBoolean("enabled"),
+                                rows.getBoolean("deleted"), rows.getString("connection_status"),
+                                rows.getString("data_freshness"), rows.getBoolean("active"),
+                                rows.getBoolean("observation_empty")));
+                    }
+                }
+                return result;
+            });
+
+            assertThat(states).containsExactly(
+                    "1001:1:1:true:false:UNKNOWN:NO_DATA:true:true",
+                    "1002:7:1:false:false:UNKNOWN:PAUSED:false:true",
+                    "1003:9:1:true:false:UNKNOWN:NO_DATA:true:true",
+                    "1004:11:1:false:true:UNKNOWN:PAUSED:false:true");
+            assertThat(singleLong(database.dataSource(), """
+                    SELECT count(DISTINCT observed_at)
+                    FROM (
+                        SELECT updated_at AS observed_at FROM monitoring_states
+                        UNION ALL
+                        SELECT activation_at FROM monitoring_states WHERE activation_at IS NOT NULL
+                        UNION ALL
+                        SELECT created_at FROM risk_policies
+                        UNION ALL
+                        SELECT updated_at FROM risk_policies
+                    ) migration_times
+                    """)).isEqualTo(1L);
+            assertThat(singleLong(database.dataSource(), """
+                    SELECT count(*) FROM monitoring_states
+                    WHERE EXTRACT(MICROSECONDS FROM updated_at)::BIGINT % 1000 <> 0
+                       OR (activation_at IS NOT NULL
+                           AND EXTRACT(MICROSECONDS FROM activation_at)::BIGINT % 1000 <> 0)
+                    """)).isZero();
+            assertThat(singleLong(database.dataSource(), """
+                    SELECT count(*) FROM risk_policies
+                    WHERE version = 1 AND stale_after_seconds = 30
+                      AND notification_cooldown_seconds = 300
+                    """)).isEqualTo(4L);
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode expectedPolicy = LifecyclePolicyContract.defaultPolicy(objectMapper);
+            List<JsonNode> policies = withConnection(database.dataSource(), connection -> {
+                List<JsonNode> result = new ArrayList<>();
+                try (Statement statement = connection.createStatement();
+                     ResultSet rows = statement.executeQuery(
+                             "SELECT rules::text FROM risk_policies ORDER BY database_config_id")) {
+                    while (rows.next()) {
+                        result.add(objectMapper.readTree(rows.getString(1)));
+                    }
+                }
+                return result;
+            });
+            assertThat(policies).hasSize(4).allMatch(expectedPolicy::equals);
+            assertThat(countRows(database.dataSource(), "metric_data")).isEqualTo(metricCount);
+            assertThat(countRows(database.dataSource(), "event_outbox")).isEqualTo(outboxCount);
+            assertThat(Flyway.configure().dataSource(database.dataSource()).load()
+                    .migrate().migrationsExecuted).isZero();
+        } finally {
+            dropActualDatabase(database);
+        }
+    }
+
+    @Test
+    void invalidRetainedTargetRollsBackCompositeKeysTablesAndBackfill() throws Exception {
+        assertInvalidRetainedTargetRollsBack(2001L, 0L, false, false,
+                "id=2001, config_version=0, enabled=f, deleted=f");
+        assertInvalidRetainedTargetRollsBack(2002L, 2L, true, true,
+                "id=2002, config_version=2, enabled=t, deleted=t");
+        assertInvalidRetainedTargetRollsBack(9_007_199_254_740_992L, 3L, false, false,
+                "id=9007199254740992, config_version=3, enabled=f, deleted=f");
     }
 
     private ActualDatabase prepareActualDatabase() throws Exception {
@@ -171,6 +205,123 @@ class PartCStagedSchemaTest {
         DataSource actual = postgres.getDatabase("postgres", name);
         Flyway.configure().dataSource(actual).load().migrate();
         return new ActualDatabase(name, actual);
+    }
+
+    private ActualDatabase prepareActualDatabaseAt(String target) throws Exception {
+        String name = "part_c_retained_" + UUID.randomUUID().toString().replace("-", "");
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE DATABASE " + quoteIdentifier(name));
+        }
+
+        DataSource actual = postgres.getDatabase("postgres", name);
+        Flyway.configure().dataSource(actual).target(target).load().migrate();
+        return new ActualDatabase(name, actual);
+    }
+
+    private void seedRetainedTargets(DataSource source) throws Exception {
+        withConnection(source, connection -> {
+            connection.setAutoCommit(false);
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("""
+                        INSERT INTO database_configs (
+                            id, collection_interval_seconds, created_at, enabled, host,
+                            name, port, status, updated_at, config_version, deleted_at
+                        ) VALUES
+                            (1001, 60, '2026-09-29T00:00:00Z', TRUE, '127.0.0.1',
+                             'Enabled v1', 5432, 'UP', '2026-09-29T00:00:00Z', 1, NULL),
+                            (1002, 60, '2026-09-29T00:00:00Z', FALSE, '127.0.0.1',
+                             'Paused v7', 5433, 'UNKNOWN', '2026-09-29T00:00:00Z', 7, NULL),
+                            (1003, 60, '2026-09-29T00:00:00Z', TRUE, '127.0.0.1',
+                             'Enabled v9', 5434, 'DOWN', '2026-09-29T00:00:00Z', 9, NULL),
+                            (1004, 60, '2026-09-29T00:00:00Z', FALSE, '127.0.0.1',
+                             'Deleted v11', 5435, 'UNKNOWN', '2026-09-29T00:00:00Z', 11,
+                             '2026-09-29T01:00:00Z')
+                        """);
+                statement.execute("""
+                        INSERT INTO metric_data (
+                            id, collection_status, created_at, database_config_id, timestamp,
+                            config_version, collection_attempt_time, last_success_at,
+                            unavailable_metrics
+                        ) VALUES (
+                            9001, 'SUCCESS', '2026-09-29T00:00:00Z', 1003,
+                            '2026-09-29T00:00:00Z', 8, '2026-09-29T00:00:00Z',
+                            '2026-09-29T00:00:00Z', '{}'::jsonb
+                        )
+                        """);
+            }
+            connection.commit();
+            return null;
+        });
+    }
+
+    private long countRows(DataSource source, String table) throws Exception {
+        return singleLong(source, "SELECT count(*) FROM " + table);
+    }
+
+    private long singleLong(DataSource source, String sql) throws Exception {
+        return withConnection(source, connection -> {
+            try (Statement statement = connection.createStatement();
+                 ResultSet rows = statement.executeQuery(sql)) {
+                assertThat(rows.next()).isTrue();
+                return rows.getLong(1);
+            }
+        });
+    }
+
+    private void assertInvalidRetainedTargetRollsBack(
+            long id,
+            long version,
+            boolean enabled,
+            boolean deleted,
+            String expectedDiagnostic
+    ) throws Exception {
+        ActualDatabase database = prepareActualDatabaseAt("3");
+        try {
+            withConnection(database.dataSource(), connection -> {
+                try (Statement statement = connection.createStatement()) {
+                    statement.execute("""
+                            INSERT INTO database_configs (
+                                id, collection_interval_seconds, created_at, enabled, host,
+                                name, port, status, updated_at, config_version, deleted_at
+                            ) VALUES (
+                                %d, 60, '2026-09-29T00:00:00Z', %s, '127.0.0.1',
+                                'Invalid retained target', 5432, 'UNKNOWN',
+                                '2026-09-29T00:00:00Z', %d, %s
+                            )
+                            """.formatted(id, enabled, version,
+                            deleted ? "'2026-09-29T01:00:00Z'" : "NULL"));
+                }
+                return null;
+            });
+            Flyway flyway = Flyway.configure().dataSource(database.dataSource()).load();
+
+            Throwable failure = catchThrowable(flyway::migrate);
+
+            assertThat(failure).isInstanceOf(FlywayException.class)
+                    .hasStackTraceContaining(expectedDiagnostic);
+            assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+            assertThat(flyway.info().pending()).singleElement()
+                    .satisfies(info -> assertThat(info.getVersion().getVersion()).isEqualTo("4"));
+            assertThat(singleLong(database.dataSource(), """
+                    SELECT count(*) FROM pg_constraint
+                    WHERE conname IN (
+                        'auth_sessions_sid_user_unique',
+                        'metric_data_id_target_unique'
+                    )
+                    """)).isZero();
+            assertThat(singleLong(database.dataSource(), """
+                    SELECT count(*) FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name IN (
+                          'monitoring_states', 'risk_policies', 'incidents',
+                          'risk_rule_states', 'push_subscriptions',
+                          'notification_webhooks', 'notification_deliveries'
+                      )
+                    """)).isZero();
+        } finally {
+            dropActualDatabase(database);
+        }
     }
 
     private void seedActualPrerequisites(DataSource source) throws Exception {
@@ -240,20 +391,18 @@ class PartCStagedSchemaTest {
         });
     }
 
-    private void addActualCompositeKeys(DataSource source, boolean authKey, boolean metricKey) throws Exception {
-        withConnection(source, connection -> {
-            connection.setAutoCommit(false);
-            try (Statement statement = connection.createStatement()) {
-                if (authKey) {
-                    statement.execute("ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_sid_user_unique UNIQUE (sid, user_id)");
-                }
-                if (metricKey) {
-                    statement.execute("ALTER TABLE metric_data ADD CONSTRAINT metric_data_id_target_unique UNIQUE (id, database_config_id)");
-                }
-            }
-            connection.commit();
-            return null;
-        });
+    private void assertRequiredParentKeys(DataSource source) throws Exception {
+        assertThat(singleLong(source, """
+                SELECT count(*)
+                FROM pg_constraint constraint_row
+                JOIN pg_class table_row ON table_row.oid = constraint_row.conrelid
+                JOIN pg_namespace schema_row ON schema_row.oid = table_row.relnamespace
+                WHERE schema_row.nspname = 'public'
+                  AND (table_row.relname, constraint_row.conname) IN (
+                      ('auth_sessions', 'auth_sessions_sid_user_unique'),
+                      ('metric_data', 'metric_data_id_target_unique')
+                  )
+                """)).isEqualTo(2L);
     }
 
     private void dropActualDatabase(ActualDatabase database) throws Exception {
@@ -265,32 +414,6 @@ class PartCStagedSchemaTest {
 
     private static String quoteIdentifier(String identifier) {
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
-    }
-
-    private void prepareFixture() throws Exception {
-        executeScript("test-fixtures/V2_V3_prerequisites.sql");
-    }
-
-    private void applyStagedV4() throws Exception {
-        applyStagedV4(dataSource, "part_c_probe");
-    }
-
-    private void applyStagedV4(DataSource source) throws Exception {
-        applyStagedV4(source, "public");
-    }
-
-    private void applyStagedV4(DataSource source, String schema) throws Exception {
-        withConnection(source, connection -> {
-            connection.setAutoCommit(false);
-            setSearchPath(connection, schema);
-            executeScript(connection, SCHEMA_ROOT.resolve("V4__part_c_monitoring.sql"));
-            connection.commit();
-            return null;
-        });
-    }
-
-    private ProbeResult runConstraintProbe() throws Exception {
-        return runConstraintProbe(dataSource, "part_c_probe");
     }
 
     private ProbeResult runConstraintProbe(DataSource source, String schema) throws Exception {
@@ -307,10 +430,6 @@ class PartCStagedSchemaTest {
                 return result;
             }
         });
-    }
-
-    private void assertMonitoringStateActivationColumn() throws Exception {
-        assertMonitoringStateActivationColumn(dataSource, "part_c_probe");
     }
 
     private void assertMonitoringStateActivationColumn(DataSource source, String schema) throws Exception {
@@ -337,10 +456,6 @@ class PartCStagedSchemaTest {
         assertThat(column.dataType()).isEqualTo("timestamp with time zone");
         assertThat(column.udtName()).isEqualTo("timestamptz");
         assertThat(column.nullable()).isEqualTo("YES");
-    }
-
-    private void assertPartCTableInventory() throws Exception {
-        assertPartCTableInventory(dataSource, "part_c_probe");
     }
 
     private void assertPartCTableInventory(DataSource source, String schema) throws Exception {
@@ -373,10 +488,6 @@ class PartCStagedSchemaTest {
                 "incidents", "monitoring_states", "notification_deliveries",
                 "notification_webhooks", "push_subscriptions", "risk_policies",
                 "risk_rule_states");
-    }
-
-    private void assertOutboxShape() throws Exception {
-        assertOutboxShape(dataSource, "part_c_probe");
     }
 
     private void assertOutboxShape(DataSource source, String schema) throws Exception {
@@ -434,75 +545,12 @@ class PartCStagedSchemaTest {
         assertThat(processed.get(3).udtName()).isEqualTo("timestamptz");
     }
 
-    private void executeScript(String relativePath) throws Exception {
-        withConnection(connection -> {
-            connection.setAutoCommit(false);
-            executeScript(connection, SCHEMA_ROOT.resolve(relativePath));
-            connection.commit();
-            return null;
-        });
-    }
-
-    private void executeScript(DataSource source, String relativePath, String schema) throws Exception {
-        withConnection(source, connection -> {
-            connection.setAutoCommit(false);
-            executeScript(connection, SCHEMA_ROOT.resolve(relativePath), schema);
-            connection.commit();
-            return null;
-        });
-    }
-
-    private void execute(String sql) throws Exception {
-        withConnection(connection -> {
-            connection.setAutoCommit(false);
-            setProbeSearchPath(connection);
-            try (Statement statement = connection.createStatement()) {
-                statement.execute(sql);
-            }
-            connection.commit();
-            return null;
-        });
-    }
-
-    private void cleanupProbe() throws Exception {
-        withConnection(connection -> {
-            connection.setAutoCommit(false);
-            executeScript(connection, SCHEMA_ROOT.resolve("probes/cleanup.sql"));
-            connection.commit();
-            return null;
-        });
-
-        boolean removed = withConnection(connection -> {
-            try (Statement statement = connection.createStatement();
-                 ResultSet rows = statement.executeQuery(
-                         "SELECT to_regnamespace('part_c_probe') IS NULL")) {
-                rows.next();
-                return rows.getBoolean(1);
-            }
-        });
-        assertThat(removed).isTrue();
-    }
-
-    private static void setProbeSearchPath(Connection connection) throws SQLException {
-        setSearchPath(connection, "part_c_probe");
-    }
-
-    private static void setSearchPath(Connection connection, String schema) throws SQLException {
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("SET search_path TO " + quoteIdentifier(schema) + ", pg_catalog");
-        }
-    }
-
     private static void collectMigrationNames(List<String> names, Path migrations) throws IOException {
         try (var paths = Files.list(migrations)) {
             paths.filter(Files::isRegularFile)
                     .map(path -> path.getFileName().toString())
                     .forEach(names::add);
         }
-    }
-
-    private static void executeScript(Connection connection, Path path) throws Exception {
-        executeScript(connection, path, "part_c_probe");
     }
 
     private static void executeScript(Connection connection, Path path, String schema) throws Exception {
@@ -586,10 +634,6 @@ class PartCStagedSchemaTest {
             current = current.getParent();
         }
         throw new IllegalStateException("Unable to locate repository root");
-    }
-
-    private <T> T withConnection(SqlWork<T> work) throws Exception {
-        return withConnection(dataSource, work);
     }
 
     private <T> T withConnection(DataSource source, SqlWork<T> work) throws Exception {
