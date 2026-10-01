@@ -17,9 +17,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +39,6 @@ class DatabaseLifecycleContractTest {
     @Mock private TargetAddressPolicy addressPolicy;
     @Mock private PartBTransactionLocks locks;
     @Mock private AuditRequestContext context;
-    @Mock private ObjectProvider<MonitoringLifecyclePort> portProvider;
     @Mock private MonitoringLifecyclePort port;
 
     private DatabaseConfigService service;
@@ -47,10 +46,9 @@ class DatabaseLifecycleContractTest {
 
     @BeforeEach
     void setUp() {
-        service = new DatabaseConfigService(repository, crypto, audit, addressPolicy, locks, context, portProvider);
+        service = new DatabaseConfigService(repository, crypto, audit, addressPolicy, locks, context, port);
         requestId = UUID.randomUUID();
         lenient().when(context.current()).thenReturn(new AuditRequestContext.Details(7L, "127.0.0.1", requestId));
-        lenient().when(portProvider.getIfAvailable()).thenReturn(port);
     }
 
     @Test
@@ -114,22 +112,6 @@ class DatabaseLifecycleContractTest {
         verify(port).applyChange(any());
     }
 
-    @Test
-    void absentProductionPortDoesNotPreventPreV4Crud() {
-        DatabaseConfig config = config(true);
-        when(repository.findActiveByIdForUpdate(11L)).thenReturn(Optional.of(config));
-        when(repository.saveAndFlush(config)).thenReturn(config);
-        when(portProvider.getIfAvailable()).thenReturn(null);
-        DatabaseUpdateRequest request = new DatabaseUpdateRequest();
-        request.setConfigVersion(2L);
-        request.setName("New name");
-
-        service.update(11L, request);
-
-        verifyNoInteractions(port);
-        assertThat(config.getConfigVersion()).isEqualTo(3L);
-    }
-
     private void assertUpdate(boolean before, boolean after, TargetChangeType type) {
         DatabaseConfig config = config(before);
         when(repository.findActiveByIdForUpdate(11L)).thenReturn(Optional.of(config));
@@ -150,7 +132,10 @@ class DatabaseLifecycleContractTest {
 
     private TargetChange capturedChange() {
         ArgumentCaptor<TargetChange> captor = ArgumentCaptor.forClass(TargetChange.class);
-        verify(port).applyChange(captor.capture());
+        InOrder ordered = inOrder(audit, port);
+        ordered.verify(audit).success(any(), any(), any(), anyString(), any(), anyString(), any(), anyString());
+        ordered.verify(port).applyChange(captor.capture());
+        verifyNoMoreInteractions(port);
         return captor.getValue();
     }
 

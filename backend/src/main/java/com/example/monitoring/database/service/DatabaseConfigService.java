@@ -22,7 +22,6 @@ import com.example.monitoring.lifecycle.port.MonitoringLifecyclePort;
 import com.example.monitoring.lifecycle.port.TargetChange;
 import com.example.monitoring.lifecycle.port.TargetChangeType;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -45,7 +44,7 @@ public class DatabaseConfigService {
     private final TargetAddressPolicy targetAddressPolicy;
     private final PartBTransactionLocks transactionLocks;
     private final AuditRequestContext auditRequestContext;
-    private final ObjectProvider<MonitoringLifecyclePort> lifecyclePort;
+    private final MonitoringLifecyclePort lifecyclePort;
 
     @Transactional
     public DatabaseResponse create(DatabaseCreateRequest request) {
@@ -151,13 +150,10 @@ public class DatabaseConfigService {
         AuditRequestContext.Details context = auditRequestContext.current();
         auditEventService.success(context.actorId(), action, AuditTargetType.DATABASE,
                 config.getId().toString(), config.getId(), context.clientIp(), context.requestId(), summary);
-        MonitoringLifecyclePort port = lifecyclePort.getIfAvailable();
-        if (port != null) {
-            port.applyChange(new TargetChange(ApiId.require(config.getId(), "id"),
-                    ApiId.require(config.getConfigVersion(), "configVersion"), changeType,
-                    Boolean.TRUE.equals(config.getEnabled()), config.getName(), Instant.now(),
-                    context.actorId(), context.requestId()));
-        }
+        lifecyclePort.applyChange(new TargetChange(ApiId.require(config.getId(), "id"),
+                ApiId.require(config.getConfigVersion(), "configVersion"), changeType,
+                Boolean.TRUE.equals(config.getEnabled()), config.getName(), Instant.now(),
+                context.actorId(), context.requestId()));
     }
 
     private DatabaseConfig findActive(Long id) {
