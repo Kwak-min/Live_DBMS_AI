@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "PATCH",
+    "path": "/databases/5",
+    "body": {
+      "configVersion": 6,
+      "name": "scn-a-1001024804-stale"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "X-Request-Id": "efee45b6-ac8e-4e5c-aef5-80eded8a598f",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "code": "CONFIG_VERSION_CONFLICT",
+      "message": "DB 설정이 이미 변경되었습니다.",
+      "requestId": "efee45b6-ac8e-4e5c-aef5-80eded8a598f",
+      "fieldErrors": []
+    }
+  }
+}

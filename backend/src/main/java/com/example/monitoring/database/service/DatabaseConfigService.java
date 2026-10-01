@@ -4,6 +4,7 @@ import com.example.monitoring.common.api.ApiException;
 import com.example.monitoring.common.api.FieldErrorResponse;
 import com.example.monitoring.common.api.PageResponse;
 import com.example.monitoring.common.api.ApiId;
+import com.example.monitoring.common.web.AuditRequestContext;
 import com.example.monitoring.database.dto.DatabaseCreateRequest;
 import com.example.monitoring.database.dto.DatabaseResponse;
 import com.example.monitoring.database.dto.DatabaseUpdateRequest;
@@ -17,7 +18,11 @@ import com.example.monitoring.domain.AuditAction;
 import com.example.monitoring.domain.AuditTargetType;
 import com.example.monitoring.service.AuditEventService;
 import com.example.monitoring.common.persistence.PartBTransactionLocks;
+import com.example.monitoring.lifecycle.port.MonitoringLifecyclePort;
+import com.example.monitoring.lifecycle.port.TargetChange;
+import com.example.monitoring.lifecycle.port.TargetChangeType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -26,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -38,6 +44,8 @@ public class DatabaseConfigService {
     private final AuditEventService auditEventService;
     private final TargetAddressPolicy targetAddressPolicy;
     private final PartBTransactionLocks transactionLocks;
+    private final AuditRequestContext auditRequestContext;
+    private final ObjectProvider<MonitoringLifecyclePort> lifecyclePort;
 
     @Transactional
     public DatabaseResponse create(DatabaseCreateRequest request) {
@@ -64,7 +72,7 @@ public class DatabaseConfigService {
         storeUsername(config, validatedUsername);
         storePassword(config, validatedPassword);
         DatabaseConfig saved = databaseConfigRepository.saveAndFlush(config);
-        auditEventService.successCurrent(AuditAction.DATABASE_CREATED, AuditTargetType.DATABASE, saved.getId().toString(), saved.getId(),
+        recordChange(saved, TargetChangeType.CREATED, AuditAction.DATABASE_CREATED,
                 "Database configuration created");
         return DatabaseResponse.from(saved);
     }
@@ -95,6 +103,7 @@ public class DatabaseConfigService {
         if (!request.getConfigVersion().equals(config.getConfigVersion())) {
             throw new ApiException(HttpStatus.CONFLICT, "CONFIG_VERSION_CONFLICT", "DB 설정이 이미 변경되었습니다.");
         }
+        boolean wasEnabled = Boolean.TRUE.equals(config.getEnabled());
         if (request.isNameSpecified()) config.setName(name(request.getName()));
         String nextHost = request.isHostSpecified() ? host(request.getHost()) : config.getHost();
         Integer nextPort = request.isPortSpecified() ? port(request.getPort()) : config.getPort();
@@ -116,7 +125,10 @@ public class DatabaseConfigService {
         config.setLastErrorMessage(null);
         config.setStatus(TargetDbStatus.UNKNOWN);
         DatabaseConfig saved = databaseConfigRepository.saveAndFlush(config);
-        auditEventService.successCurrent(AuditAction.DATABASE_UPDATED, AuditTargetType.DATABASE, saved.getId().toString(), saved.getId(),
+        TargetChangeType changeType = wasEnabled == Boolean.TRUE.equals(saved.getEnabled())
+                ? TargetChangeType.UPDATED
+                : (Boolean.TRUE.equals(saved.getEnabled()) ? TargetChangeType.RESUMED : TargetChangeType.PAUSED);
+        recordChange(saved, changeType, AuditAction.DATABASE_UPDATED,
                 "Database configuration updated");
         return DatabaseResponse.from(saved);
     }
@@ -128,9 +140,24 @@ public class DatabaseConfigService {
             config.setEnabled(false);
             config.setDeletedAt(LocalDateTime.now());
             config.setConfigVersion(config.getConfigVersion() + 1);
-            auditEventService.successCurrent(AuditAction.DATABASE_DELETED, AuditTargetType.DATABASE, config.getId().toString(), config.getId(),
+            DatabaseConfig saved = databaseConfigRepository.saveAndFlush(config);
+            recordChange(saved, TargetChangeType.DELETED, AuditAction.DATABASE_DELETED,
                     "Database configuration deleted");
         });
+    }
+
+    private void recordChange(DatabaseConfig config, TargetChangeType changeType,
+                              AuditAction action, String summary) {
+        AuditRequestContext.Details context = auditRequestContext.current();
+        auditEventService.success(context.actorId(), action, AuditTargetType.DATABASE,
+                config.getId().toString(), config.getId(), context.clientIp(), context.requestId(), summary);
+        MonitoringLifecyclePort port = lifecyclePort.getIfAvailable();
+        if (port != null) {
+            port.applyChange(new TargetChange(ApiId.require(config.getId(), "id"),
+                    ApiId.require(config.getConfigVersion(), "configVersion"), changeType,
+                    Boolean.TRUE.equals(config.getEnabled()), config.getName(), Instant.now(),
+                    context.actorId(), context.requestId()));
+        }
     }
 
     private DatabaseConfig findActive(Long id) {

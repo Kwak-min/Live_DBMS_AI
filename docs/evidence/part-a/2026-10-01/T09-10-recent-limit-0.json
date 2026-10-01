@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/6/recent?limit=0",
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "X-Request-Id": "6bd75ad2-a43a-4e2b-b0aa-12040ab1c0ea",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "요청 값을 확인해 주세요.",
+      "requestId": "6bd75ad2-a43a-4e2b-b0aa-12040ab1c0ea",
+      "fieldErrors": [
+        {
+          "field": "limit",
+          "code": "OUT_OF_RANGE",
+          "message": "limit은(는) 1~1000 범위여야 합니다."
+        }
+      ]
+    }
+  }
+}

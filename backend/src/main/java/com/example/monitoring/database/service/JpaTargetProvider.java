@@ -4,6 +4,7 @@ import com.example.monitoring.database.port.CollectorTarget;
 import com.example.monitoring.database.port.TargetMetadata;
 import com.example.monitoring.database.port.TargetProvider;
 import com.example.monitoring.database.security.DatabaseCredentialCrypto;
+import com.example.monitoring.database.security.DatabaseCredentialUnavailableException;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.repository.DatabaseConfigRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +23,8 @@ public class JpaTargetProvider implements TargetProvider {
 
     @Override
     @Transactional(readOnly = true)
-    public List<CollectorTarget> listEnabled() {
-        return repository.findByEnabledTrueAndDeletedAtIsNull().stream().map(this::decrypt).toList();
+    public List<TargetMetadata> listEnabled() {
+        return repository.findByEnabledTrueAndDeletedAtIsNull().stream().map(this::metadata).toList();
     }
 
     @Override
@@ -43,19 +44,27 @@ public class JpaTargetProvider implements TargetProvider {
     @Override
     @Transactional(readOnly = true)
     public Optional<TargetMetadata> getMetadata(long databaseConfigId) {
-        return repository.findByIdAndDeletedAtIsNull(databaseConfigId).map(config -> new TargetMetadata(
-                config.getId(), config.getConfigVersion(), config.getName(), config.getHost(), config.getPort(),
-                config.getDatabaseName(), config.getEnabled()));
+        return repository.findByIdAndDeletedAtIsNull(databaseConfigId).map(this::metadata);
+    }
+
+    private TargetMetadata metadata(DatabaseConfig config) {
+        return new TargetMetadata(config.getId(), config.getConfigVersion(), config.getName(), config.getHost(),
+                config.getPort(), config.getDatabaseName(), config.getEnabled());
     }
 
     private CollectorTarget decrypt(DatabaseConfig config) {
-        requireEncrypted(config);
-        String username = crypto.decrypt(config.getId(), "username", config.getUsernameKeyVersion(),
-                config.getUsernameNonce(), config.getUsernameCiphertext());
-        String password = crypto.decrypt(config.getId(), "password", config.getPasswordKeyVersion(),
-                config.getPasswordNonce(), config.getPasswordCiphertext());
-        return new CollectorTarget(config.getId(), config.getConfigVersion(), config.getName(), config.getHost(),
-                config.getPort(), config.getDatabaseName(), username, password, config.getEnabled());
+        try {
+            requireEncrypted(config);
+            String username = crypto.decrypt(config.getId(), "username", config.getUsernameKeyVersion(),
+                    config.getUsernameNonce(), config.getUsernameCiphertext());
+            String password = crypto.decrypt(config.getId(), "password", config.getPasswordKeyVersion(),
+                    config.getPasswordNonce(), config.getPasswordCiphertext());
+            return new CollectorTarget(config.getId(), config.getConfigVersion(), config.getName(), config.getHost(),
+                    config.getPort(), config.getDatabaseName(), username, password, config.getEnabled());
+        } catch (RuntimeException exception) {
+            throw new DatabaseCredentialUnavailableException(config.getId(), config.getConfigVersion(),
+                    config.getUsernameKeyVersion(), config.getPasswordKeyVersion(), exception);
+        }
     }
 
     private void requireEncrypted(DatabaseConfig config) {

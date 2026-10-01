@@ -3,6 +3,7 @@ package com.example.monitoring.scheduler;
 import com.example.monitoring.collector.DbMetricsCollector;
 import com.example.monitoring.common.config.UtcInstantJacksonConfig;
 import com.example.monitoring.database.port.CollectorTarget;
+import com.example.monitoring.database.port.TargetMetadata;
 import com.example.monitoring.database.port.TargetProvider;
 import com.example.monitoring.domain.MetricData;
 import com.example.monitoring.metric.MetricCollectionRecorder;
@@ -55,7 +56,7 @@ class CollectorHeartbeatPublisherTest {
         publisher = new CollectorHeartbeatPublisher(worker, redisTemplate, objectMapper);
         ReflectionTestUtils.setField(publisher, "streamKey", "stream:collector-heartbeats");
         when(redisTemplate.opsForStream()).thenReturn(streams);
-        when(recorder.record(any(), any())).thenReturn(Optional.empty());
+        when(recorder.record(any(CollectorTarget.class), any())).thenReturn(Optional.empty());
     }
 
     @AfterEach
@@ -85,7 +86,9 @@ class CollectorHeartbeatPublisherTest {
         CollectorTarget target = new CollectorTarget(1L, 1L, "db", "127.0.0.1", 13306, null, "u", "p", true);
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        when(targetProvider.listEnabled()).thenReturn(List.of(target));
+        when(targetProvider.listEnabled()).thenReturn(List.of(new TargetMetadata(1L, 1L, "db", "127.0.0.1",
+                13306, null, true)));
+        when(targetProvider.getForCollection(1L)).thenReturn(Optional.of(target));
         when(collector.collectMetrics(target)).thenAnswer(invocation -> {
             started.countDown();
             release.await(5, TimeUnit.SECONDS);

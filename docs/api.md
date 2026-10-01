@@ -91,7 +91,7 @@ Database: `{id:Id,name:Text,host:Text,port:int,databaseName:Text?,enabled:boolea
 
 Ping은 수집 비활성 대상에도 허용되며 제한된 1회 진단만 수행한다. 정기 수집의 timestamp·connectionStatus·risk·enabled를 갱신하지 않는다. 1대당 10초에 1회, 작업 제한 15초다.
 
-PingResult: `{databaseConfigId:Id,status:UP|DOWN,version:Text?,responseTimeMs:int,timestamp:Time,errorCode:Text?,errorMessage:Text?}`. 성공은 오류 null. 대상 접속 실패는 200+DOWN, version=null이고 AUTH_FAILED/CONNECT_TIMEOUT/CONNECTION_REFUSED/QUERY_FAILED/UNKNOWN 중 errorCode를 반환한다. 자체 시스템 저장소 장애는 503이다.
+PingResult: `{databaseConfigId:Id,status:UP|DOWN,version:Text?,responseTimeMs:int,timestamp:Time,errorCode:Text?,errorMessage:Text?}`. 성공은 오류 null. 대상 접속 실패는 200+DOWN, version=null이고 AUTH_FAILED/CONNECT_TIMEOUT/CONNECTION_REFUSED/QUERY_FAILED/UNKNOWN 중 errorCode를 반환한다. 진단 중 예상하지 못한 서버 내부 오류도 200+DOWN이며 errorCode는 INTERNAL_ERROR다. 자체 시스템 저장소 장애는 503이다.
 
 v1은 기존 `/api/v1/projects/**`와 `GET /api/databases/{id}/ping`을 제공하지 않는다. 수동 수집 중단/재개는 PATCH의 enabled=false/true를 사용한다. 서버의 외부 MariaDB 클라이언트를 차단하는 기능은 없다.
 

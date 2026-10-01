@@ -5,6 +5,8 @@ import com.example.monitoring.auth.domain.UserAccount;
 import com.example.monitoring.auth.repository.AuthSessionRepository;
 import com.example.monitoring.auth.repository.UserAccountRepository;
 import com.example.monitoring.auth.service.AccessTokenService;
+import com.example.monitoring.domain.DatabaseConfig;
+import com.example.monitoring.repository.DatabaseConfigRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
@@ -35,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "app.collector.enabled=false",
         "app.metrics.retention-cleanup-enabled=false",
         "app.part-b.retention-cleanup-enabled=false",
+        "app.outbox.publisher-enabled=false",
         "app.database-security.verify-on-startup=false"
 })
 @ActiveProfiles("local")
@@ -88,6 +91,9 @@ class PartBHttpContractTest {
 
     @Autowired
     private AccessTokenService accessTokenService;
+
+    @Autowired
+    private DatabaseConfigRepository databaseConfigRepository;
 
     @Test
     void generatedOpenApiIncludesPartBEndpointsAndExcludesResponseSecrets() throws Exception {
@@ -206,6 +212,40 @@ class PartBHttpContractTest {
         assertThat(databases.path("size").asInt()).isEqualTo(20);
         assertThat(databases.path("totalElements").asLong()).isZero();
         assertThat(databases.path("totalPages").asInt()).isZero();
+    }
+
+    @Test
+    void databaseListTimestampsUseUtcWithExactlyThreeFractionalDigits() throws Exception {
+        UserAccount user = userAccountRepository.save(UserAccount.builder()
+                .email("database-time-" + UUID.randomUUID() + "@example.test")
+                .displayName("Database time test")
+                .passwordHash("unused-test-hash")
+                .build());
+        UUID sessionId = UUID.randomUUID();
+        Instant now = Instant.now();
+        authSessionRepository.save(AuthSession.builder().id(sessionId).user(user)
+                .currentRefreshHash(UUID.randomUUID().toString().replace("-", ""))
+                .createdAt(now).expiresAt(now.plusSeconds(3600))
+                .authVersion(user.getAuthVersion()).build());
+        String token = accessTokenService.issue(user, sessionId).value();
+        DatabaseConfig config = databaseConfigRepository.saveAndFlush(DatabaseConfig.builder()
+                .name("timestamp-test").host("127.0.0.1").port(13306).enabled(true).build());
+        try {
+            HttpResponse<String> response = get("/api/v1/databases", token);
+            assertThat(response.statusCode()).isEqualTo(200);
+            JsonNode items = objectMapper.readTree(response.body()).path("items");
+            JsonNode item = null;
+            for (JsonNode candidate : items) {
+                if (candidate.path("id").asLong() == config.getId()) item = candidate;
+            }
+            assertThat(item).isNotNull();
+            assertThat(item.path("createdAt").asText())
+                    .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z");
+            assertThat(item.path("updatedAt").asText())
+                    .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z");
+        } finally {
+            databaseConfigRepository.deleteById(config.getId());
+        }
     }
 
     private HttpResponse<String> get(String path) throws Exception {

@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "DELETE",
+    "path": "/databases/5",
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "X-Request-Id": "0b96897f-bab6-41df-ad5c-923d93c42db2"
+    },
+    "body": null
+  }
+}

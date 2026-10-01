@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "PATCH",
+    "path": "/databases/5",
+    "body": {
+      "configVersion": 3,
+      "enabled": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "d7d57051-e7dd-4149-a4bb-2e8e12e5b839",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": 5,
+      "name": "scn-a-1001024804-renamed",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "enabled": true,
+      "configVersion": 4,
+      "connectionStatus": "UNKNOWN",
+      "lastAttemptAt": null,
+      "lastSuccessAt": null,
+      "createdAt": "2026-10-01T02:48:05.331Z",
+      "updatedAt": "2026-10-01T02:48:54.504Z"
+    }
+  }
+}

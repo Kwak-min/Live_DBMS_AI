@@ -1,0 +1,45 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/5/latest",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "beccd9a1-9b18-43f5-ab41-c455283eddf1",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": 1110,
+      "databaseConfigId": 5,
+      "configVersion": 1,
+      "timestamp": "2026-10-01T02:48:09.786Z",
+      "collectionAttemptTime": "2026-10-01T02:48:09.786Z",
+      "lastSuccessAt": "2026-10-01T02:48:09.786Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 3,
+      "maxConnections": 151,
+      "qps": null,
+      "slowQueries": 0,
+      "slowQueriesDelta": null,
+      "slowQueriesPerSecond": null,
+      "metricWindowSeconds": null,
+      "threadsRunning": 3,
+      "storageBytes": 229376,
+      "responseTimeMs": 4,
+      "collectionStatus": "SUCCESS",
+      "errorCode": null,
+      "errorMessage": null,
+      "unavailableMetrics": {
+        "qps": "WARMUP",
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED",
+        "slowQueriesDelta": "WARMUP",
+        "metricWindowSeconds": "WARMUP",
+        "slowQueriesPerSecond": "WARMUP"
+      }
+    }
+  }
+}

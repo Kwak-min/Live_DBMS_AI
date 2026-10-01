@@ -1,0 +1,26 @@
+{
+  "before": {
+    "status": "UNKNOWN",
+    "lastCheckedAt": "",
+    "lastSuccessAt": "",
+    "lastErrorMessage": "",
+    "configVersion": "3",
+    "enabled": "f"
+  },
+  "after": {
+    "status": "UNKNOWN",
+    "lastCheckedAt": "",
+    "lastSuccessAt": "",
+    "lastErrorMessage": "",
+    "configVersion": "3",
+    "enabled": "f"
+  },
+  "metricRows": [
+    "7",
+    "7"
+  ],
+  "outboxRows": [
+    "7",
+    "7"
+  ]
+}

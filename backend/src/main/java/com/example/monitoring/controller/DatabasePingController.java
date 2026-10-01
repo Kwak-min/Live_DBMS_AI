@@ -4,6 +4,7 @@ import com.example.monitoring.dto.DbPingResponseDto;
 import com.example.monitoring.service.DatabaseHealthService;
 import com.example.monitoring.common.api.ApiException;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/databases")
 @RequiredArgsConstructor
-@Tag(name = "Database Health API", description = "Endpoints for testing remote MariaDB connectivity and version check")
+@Tag(name = "Database Health API", description = "One-off connectivity and version diagnostics for a target MariaDB (ADMIN)")
 @SecurityRequirement(name = "bearerAuth")
 public class DatabasePingController {
 
@@ -30,12 +31,16 @@ public class DatabasePingController {
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Ping target database", description = "ADMIN only. Executes SELECT 1 and SELECT VERSION() once; a target connection failure returns 200 with DOWN. Does not update scheduled collection state. Limited to once per target every 10 seconds.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "UP or DOWN diagnostic result"),
-            @ApiResponse(responseCode = "400", description = "Invalid id"),
-            @ApiResponse(responseCode = "401", description = "Access token invalid"),
-            @ApiResponse(responseCode = "403", description = "ADMIN role required"),
-            @ApiResponse(responseCode = "404", description = "Database not found or deleted"),
-            @ApiResponse(responseCode = "429", description = "Per-target Ping rate limit"),
-            @ApiResponse(responseCode = "503", description = "Dependency unavailable")})
+            @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR (id is not a positive Id)"),
+            @ApiResponse(responseCode = "401",
+                    description = "AUTH_REQUIRED, ACCESS_TOKEN_EXPIRED, INVALID_TOKEN or SESSION_REVOKED"),
+            @ApiResponse(responseCode = "403", description = "FORBIDDEN: ADMIN role required"),
+            @ApiResponse(responseCode = "404", description = "DATABASE_NOT_FOUND (missing or deleted)"),
+            @ApiResponse(responseCode = "429",
+                    description = "RATE_LIMITED: once per target every 10 seconds, or the per-user API limit",
+                    headers = @Header(name = "Retry-After", description = "Seconds to wait")),
+            @ApiResponse(responseCode = "503",
+                    description = "DEPENDENCY_UNAVAILABLE: system database or rate-limit store unavailable")})
     public ResponseEntity<DbPingResponseDto> pingDatabase(@PathVariable("id") Long id) {
         return databaseHealthService.pingDatabase(id)
                 .map(ResponseEntity::ok)

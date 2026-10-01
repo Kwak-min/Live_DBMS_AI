@@ -89,3 +89,9 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+logging:
+  level:
+    # MariaDB 드라이버는 서버 오류 문장(예: "Access denied for user '<계정>'@...")을 그대로 WARN으로 남긴다.
+    # 대상 DB 계정은 암호화 보관 대상이므로 끄고, 수집기는 errorCode/sqlState만 별도로 기록한다(T06).
+    org.mariadb.jdbc.message.server.ErrorPacket: "OFF"

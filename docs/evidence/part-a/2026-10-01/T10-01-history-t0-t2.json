@@ -1,0 +1,74 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/metrics/5/history?start=2026-10-01T02:48:09.786Z&end=2026-10-01T02:48:19.784Z",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "X-Request-Id": "f11a1a1a-2b68-4e1c-9a86-73beb5f97606",
+      "Content-Type": "application/json"
+    },
+    "body": [
+      {
+        "id": 1110,
+        "databaseConfigId": 5,
+        "configVersion": 1,
+        "timestamp": "2026-10-01T02:48:09.786Z",
+        "collectionAttemptTime": "2026-10-01T02:48:09.786Z",
+        "lastSuccessAt": "2026-10-01T02:48:09.786Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 3,
+        "maxConnections": 151,
+        "qps": null,
+        "slowQueries": 0,
+        "slowQueriesDelta": null,
+        "slowQueriesPerSecond": null,
+        "metricWindowSeconds": null,
+        "threadsRunning": 3,
+        "storageBytes": 229376,
+        "responseTimeMs": 4,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "qps": "WARMUP",
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED",
+          "slowQueriesDelta": "WARMUP",
+          "metricWindowSeconds": "WARMUP",
+          "slowQueriesPerSecond": "WARMUP"
+        }
+      },
+      {
+        "id": 1114,
+        "databaseConfigId": 5,
+        "configVersion": 1,
+        "timestamp": "2026-10-01T02:48:14.783Z",
+        "collectionAttemptTime": "2026-10-01T02:48:14.783Z",
+        "lastSuccessAt": "2026-10-01T02:48:14.783Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 3,
+        "maxConnections": 151,
+        "qps": 3.603,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 4.996,
+        "threadsRunning": 3,
+        "storageBytes": 229376,
+        "responseTimeMs": 4,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "redisStoppedAt": "2026-10-01T02:49:26.601Z",
+  "failedHead": {
+    "eventId": "73bbda70-c6a0-4e78-be89-665bdd0cefa3",
+    "eventType": "MetricCollectedEvent",
+    "attempts": "3",
+    "lastError": "QueryTimeoutException: Redis command timed out",
+    "nextAttemptAt": "2026-10-01T02:49:41.820Z"
+  },
+  "pending": [
+    {
+      "eventId": "73bbda70-c6a0-4e78-be89-665bdd0cefa3",
+      "metricId": "1156",
+      "attempts": 3,
+      "lastError": "QueryTimeoutException: Redis command timed out"
+    },
+    {
+      "eventId": "92dcb9e4-500b-467e-9b64-cd651b878e96",
+      "metricId": "1158",
+      "attempts": 0,
+      "lastError": ""
+    },
+    {
+      "eventId": "ab197d9e-0419-4356-861c-a861f6794da6",
+      "metricId": "1161",
+      "attempts": 0,
+      "lastError": ""
+    }
+  ]
+}

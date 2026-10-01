@@ -28,8 +28,9 @@ public final class EmbeddedPostgresSupport {
     }
 
     public static synchronized EmbeddedPostgres postgres() {
+        // 다른 테스트가 같은 시스템 속성을 지울 수 있으므로(PartBHttpContractTest @AfterAll) 호출마다 다시 설정한다.
+        MIGRATION_PROPERTIES.forEach(System::setProperty);
         if (postgres == null) {
-            MIGRATION_PROPERTIES.forEach(System::setProperty);
             try {
                 postgres = EmbeddedPostgres.start();
             } catch (IOException e) {
