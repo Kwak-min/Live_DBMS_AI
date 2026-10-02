@@ -152,7 +152,7 @@ class PinnedHttpsTransportLocalTlsTest {
     }
 
     @Test
-    void resolvesAndRevalidatesEverySendSoRebindingCannotReuseAConnection() throws Exception {
+    void reResolvesEverySendAndDoesNotReuseThePreviousPinnedConnection() throws Exception {
         AtomicInteger resolutions = new AtomicInteger();
         HostResolver resolver = host -> resolutions.incrementAndGet() == 1
                 ? new InetAddress[] {InetAddress.getLoopbackAddress()}
