@@ -163,6 +163,23 @@ class MetricSnapshotCalculatorTest {
     }
 
     @Test
+    @DisplayName("Unreadable stored credentials are a CONNECTION_FAILED observation with INTERNAL_ERROR")
+    void credentialsUnavailableIsConnectionFailure() {
+        connected(VERSION, T0, status(18, 3, 1000, 310, 100), 0);
+
+        MetricData failed = calculator.credentialsUnavailable(TARGET, T5);
+        MetricData afterFailure = connected(VERSION, T5.plusSeconds(5), status(18, 3, 1100, 311, 110), 10 * SECOND);
+
+        assertThat(failed.getCollectionStatus()).isEqualTo(CollectionStatus.CONNECTION_FAILED);
+        assertThat(failed.getErrorCode()).isEqualTo(MetricErrorCode.INTERNAL_ERROR);
+        assertThat(failed.getErrorMessage()).isEqualTo("저장된 대상 DB 접속 정보를 읽지 못했습니다.");
+        assertThat(failed.getResponseTimeMs()).isZero();
+        assertThat(failed.getActiveConnections()).isNull();
+        assertThat(failed.getUnavailableMetrics()).containsEntry("activeConnections", COLLECTION_FAILED);
+        assertThat(afterFailure.getUnavailableMetrics()).containsEntry("qps", WARMUP);
+    }
+
+    @Test
     @DisplayName("Negative or non-numeric source values are rejected as QUERY_FAILED")
     void invalidValuesAreRejected() {
         Map<String, String> status = status(18, 3, 1000, 310, 100);

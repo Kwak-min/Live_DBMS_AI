@@ -31,6 +31,7 @@
 ## 2. 실행 중 발견·수정한 문제
 
 - **T06: 앱 로그에 대상 DB 계정명이 노출됐다.** MariaDB 드라이버의 `org.mariadb.jdbc.message.server.ErrorPacket`가 인증 실패 시 `Access denied for user '<계정>'@...`를 WARN으로 남긴다. `application.yml`에서 이 로거를 `OFF`로 설정했다. 수집기와 Ping은 원래 errorCode·sqlState만 기록하므로 진단 정보는 그대로 남는다. 수정 후 다시 실행해 앱 로그 0건을 확인했다.
+- **자격 증명 복호화 실패의 수집 상태를 `CONNECTION_FAILED`로 정리했다 (2026-10-02).** 기존에는 `PARTIAL_FAILURE`/`INTERNAL_ERROR`로 기록해 C 규약상 `connectionStatus=UNKNOWN`이 되고 타이머만 초기화되어, 접속 정보가 계속 깨져 있어도 사건이 열리지 않았다. 접속을 시도조차 못 한 관측이므로 `CONNECTION_FAILED`(errorCode `INTERNAL_ERROR`, responseTimeMs 0)로 바꿔 표시 상태 `DOWN`, C의 `CONNECTION_FAILURE` 판정 대상이 되게 했다. 원인 구분은 errorCode로 한다. 규약은 [events.md](events.md) 1절(지표 사전)에 반영했다. 자동 테스트: `MetricSnapshotCalculatorTest`, `MetricCollectionRecorderIntegrationTest`, `MetricSchedulerWorkerTest`.
 
 ## 3. 다시 실행하는 법
 

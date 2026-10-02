@@ -114,7 +114,7 @@ class MetricSchedulerWorkerTest {
                 new DatabaseCredentialUnavailableException(4L, 1L, 1, 1,
                         new IllegalStateException("bad key")));
         when(targetProvider.getForCollection(5L)).thenReturn(Optional.of(healthy));
-        MetricData failure = MetricData.builder().collectionStatus(CollectionStatus.PARTIAL_FAILURE)
+        MetricData failure = MetricData.builder().collectionStatus(CollectionStatus.CONNECTION_FAILED)
                 .errorCode(MetricErrorCode.INTERNAL_ERROR).build();
         when(collector.credentialsUnavailable(4L)).thenReturn(failure);
         when(collector.collectMetrics(healthy)).thenReturn(new MetricData());

@@ -25,7 +25,7 @@
 
 모든 numeric은 유한한 비음수이며 integer는 JS 안전 정수 상한 이내다. Uptime과 Queries 원본은 A가 비교용 내부 상태로 유지한다. A 재시작 시 같은 configVersion의 최신 저장 메트릭에서 lastSuccessAt을 복원하며 원본 카운터 기준은 초기화하여 WARMUP부터 시작한다. 카운터 감소/Uptime 감소/중간 실패/설정 버전 변경이면 기준을 초기화한다. 첫 유효 관측은 qps·slowQueriesDelta·slowQueriesPerSecond·metricWindowSeconds가 모두 null이다. 기준이 같고 Queries/Slow_queries 모두 유효한 다음 관측부터 실제 경과 시간으로 계산한다. 0으로 보충하지 않는다.
 
-필수 원본은 Threads_connected/max_connections/Threads_running/Queries/Slow_queries/Uptime. 필수 원본 일부 실패는 PARTIAL_FAILURE, 연결 자체 실패는 CONNECTION_FAILED, 필수 원본 모두 성공은 SUCCESS다. 첫 파생 지표 WARMUP 또는 선택 지표 storageBytes 조회 실패만으로 SUCCESS를 실패로 바꾸지 않는다. 필수 조회 SQL 오류와 접속 오류는 구분한다.
+필수 원본은 Threads_connected/max_connections/Threads_running/Queries/Slow_queries/Uptime. 필수 원본 일부 실패는 PARTIAL_FAILURE, 연결 자체 실패는 CONNECTION_FAILED, 필수 원본 모두 성공은 SUCCESS다. 첫 파생 지표 WARMUP 또는 선택 지표 storageBytes 조회 실패만으로 SUCCESS를 실패로 바꾸지 않는다. 필수 조회 SQL 오류와 접속 오류는 구분한다. 저장된 접속 정보를 복호화하지 못해 접속을 시도하지 못한 경우도 대상에 접속할 수 없으므로 CONNECTION_FAILED이며, errorCode=INTERNAL_ERROR·responseTimeMs=0으로 대상 장애(AUTH_FAILED/CONNECT_TIMEOUT/CONNECTION_REFUSED)와 구분한다. C는 이를 다른 접속 실패와 같게 connectionStatus=DOWN과 CONNECTION_FAILURE 판정에 사용한다.
 
 `errorCode`는 null 또는 AUTH_FAILED/CONNECT_TIMEOUT/CONNECTION_REFUSED/QUERY_FAILED/INTERNAL_ERROR/UNKNOWN. `errorMessage`는 안전한 짧은 설명 또는 null. `unavailableMetrics`는 nullable 지표명→UNSUPPORTED/WARMUP/COUNTER_RESET/COLLECTION_FAILED/QUERY_FAILED 맵이다. 실제 0은 누락 목록에 넣지 않는다. PARTIAL_FAILURE여도 성공한 필드는 유지한다. 접속 실패 시 실패까지 responseTimeMs는 유지할 수 있다.
 
