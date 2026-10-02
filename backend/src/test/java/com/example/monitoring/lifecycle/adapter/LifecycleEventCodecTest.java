@@ -25,6 +25,14 @@ class LifecycleEventCodecTest {
 
     @Test
     void defaultPolicyContainsExactlyTheTwoEnabledDocumentedRules() throws Exception {
+        assertThat(codec.defaultPolicyJson()).isEqualTo("[{\"ruleId\":\"CONNECTION_RATIO\","
+                + "\"metricName\":\"activeConnectionsRatio\",\"operator\":\"GTE\","
+                + "\"warningThreshold\":0.80,\"criticalThreshold\":0.90,\"fatalThreshold\":0.95,"
+                + "\"sustainSeconds\":15,\"recoverySeconds\":15,\"enabled\":true},{"
+                + "\"ruleId\":\"SLOW_QUERY_RATE\",\"metricName\":\"slowQueriesPerSecond\","
+                + "\"operator\":\"GTE\",\"warningThreshold\":1.0,\"criticalThreshold\":5.0,"
+                + "\"fatalThreshold\":null,\"sustainSeconds\":15,\"recoverySeconds\":15,"
+                + "\"enabled\":true}]");
         JsonNode actual = objectMapper.readTree(codec.defaultPolicyJson());
         JsonNode expected = objectMapper.readTree("""
                 [

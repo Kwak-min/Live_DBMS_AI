@@ -3,13 +3,12 @@ package com.example.monitoring.lifecycle.adapter;
 import com.example.monitoring.common.config.UtcInstantJacksonConfig;
 import com.example.monitoring.common.outbox.EventJson;
 import com.example.monitoring.common.outbox.OutboxEventType;
+import com.example.monitoring.risk.contract.MonitoringContracts;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,12 +31,7 @@ final class LifecycleEventCodec {
     }
 
     String defaultPolicyJson() {
-        List<Map<String, Object>> rules = new ArrayList<>();
-        rules.add(rule("CONNECTION_RATIO", "activeConnectionsRatio",
-                new BigDecimal("0.80"), new BigDecimal("0.90"), new BigDecimal("0.95")));
-        rules.add(rule("SLOW_QUERY_RATE", "slowQueriesPerSecond",
-                new BigDecimal("1.0"), new BigDecimal("5.0"), null));
-        return writeJson(rules);
+        return writeJson(MonitoringContracts.defaultRules());
     }
 
     PreparedLifecycleEvent statusChanged(MonitoringStateWrite state) {
@@ -97,26 +91,6 @@ final class LifecycleEventCodec {
                 eventType,
                 databaseConfigId,
                 Collections.unmodifiableMap(new LinkedHashMap<>(payload)));
-    }
-
-    private Map<String, Object> rule(
-            String ruleId,
-            String metricName,
-            BigDecimal warning,
-            BigDecimal critical,
-            BigDecimal fatal
-    ) {
-        Map<String, Object> rule = new LinkedHashMap<>();
-        rule.put("ruleId", ruleId);
-        rule.put("metricName", metricName);
-        rule.put("operator", "GTE");
-        rule.put("warningThreshold", warning);
-        rule.put("criticalThreshold", critical);
-        rule.put("fatalThreshold", fatal);
-        rule.put("sustainSeconds", 15);
-        rule.put("recoverySeconds", 15);
-        rule.put("enabled", true);
-        return rule;
     }
 
     private String time(Instant instant) {
