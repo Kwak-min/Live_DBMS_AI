@@ -131,7 +131,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
     private TransactionTemplate transactions;
 
     @BeforeEach
-    void resetActiveV4() {
+    void resetActiveV5() {
         transactions = new TransactionTemplate(transactionManager);
         cleanupTestFixtures();
         installOutboxLedger();
@@ -143,11 +143,11 @@ class MonitoringLifecyclePostgresIntegrationTest {
     }
 
     @Test
-    void applicationStartsWithActiveV4AndRequiredLifecycleSchema() {
+    void applicationStartsWithActiveV5AndRequiredLifecycleSchema() {
         assertThat(applicationContext.getBean(MonitoringLifecyclePort.class)).isSameAs(lifecycle);
         assertThat(Arrays.stream(flyway.info().applied())
                 .map(info -> info.getVersion().getVersion()))
-                .containsExactly("1", "2", "3", "4");
+                .containsExactly("1", "2", "3", "4", "5");
         assertThat(tableExists("monitoring_states")).isTrue();
         assertThat(tableExists("event_outbox")).isTrue();
         assertThat(tableExists("processed_events")).isTrue();
@@ -155,7 +155,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
         assertThat(hasConstraint("metric_data", "metric_data_id_target_unique")).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM database_configs", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Long.class)).isZero();
-        proof("active-v4", "migrations=1,2,3,4", "targetRows=0", "auditRows=0");
+        proof("active-v5", "migrations=1,2,3,4,5", "targetRows=0", "auditRows=0");
     }
 
     @Test
