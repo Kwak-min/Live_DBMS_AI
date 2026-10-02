@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -24,6 +25,14 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception, HttpServletRequest request) {
         return response(exception.getStatus(), exception.getCode(), exception.getMessage(),
                 exception.getFieldErrors(), exception.getResponseHeaders(), request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(
+            AccessDeniedException exception,
+            HttpServletRequest request
+    ) {
+        return response(HttpStatus.FORBIDDEN, "FORBIDDEN", "접근 권한이 없습니다.", List.of(), request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
