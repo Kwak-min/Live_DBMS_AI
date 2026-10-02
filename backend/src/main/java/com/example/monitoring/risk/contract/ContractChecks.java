@@ -36,7 +36,8 @@ final class ContractChecks {
 
     static String text(String value, String field, int maxLength) {
         String normalized = Objects.requireNonNull(value, field).trim();
-        if (normalized.isEmpty() || normalized.length() > maxLength) {
+        if (normalized.isEmpty()
+                || normalized.codePointCount(0, normalized.length()) > maxLength) {
             throw new IllegalArgumentException(field + " length is invalid");
         }
         return normalized;
