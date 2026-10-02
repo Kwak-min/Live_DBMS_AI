@@ -27,6 +27,7 @@ public class MetricSnapshotCalculator {
 
     private static final String PARTIAL_FAILURE_MESSAGE = "일부 필수 지표를 조회하지 못했습니다.";
     private static final String INTERNAL_ERROR_MESSAGE = "대상 DB 수집 중 내부 오류가 발생했습니다.";
+    private static final String CREDENTIALS_UNAVAILABLE_MESSAGE = "저장된 대상 DB 접속 정보를 읽지 못했습니다.";
 
     private final Map<Long, Baseline> baselines = new ConcurrentHashMap<>();
 
@@ -91,6 +92,15 @@ public class MetricSnapshotCalculator {
     public MetricData connectionFailed(long targetId, Instant startedAt, long responseTimeMs,
                                        MetricErrorCode errorCode, String errorMessage) {
         return failed(targetId, startedAt, responseTimeMs, CollectionStatus.CONNECTION_FAILED, errorCode, errorMessage);
+    }
+
+    /**
+     * 저장된 접속 정보를 복호화하지 못해 접속을 시도조차 못 한 관측. 대상에 접속할 수 없으므로 CONNECTION_FAILED로
+     * 기록해 C가 DOWN·CONNECTION_FAILURE로 드러내게 하고, 원인은 errorCode=INTERNAL_ERROR로 대상 장애와 구분한다.
+     */
+    public MetricData credentialsUnavailable(long targetId, Instant startedAt) {
+        return failed(targetId, startedAt, 0, CollectionStatus.CONNECTION_FAILED, MetricErrorCode.INTERNAL_ERROR,
+                CREDENTIALS_UNAVAILABLE_MESSAGE);
     }
 
     /** 연결 후 예기치 못한 내부 오류. 부분 결과를 신뢰하지 않고 모두 null로 둔다. */

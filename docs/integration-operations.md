@@ -49,7 +49,7 @@ x는 해당 계열의 배포 시점 패치 버전이며 릴리스 산출물에�
 
 | 제공자 | 포트·입출력 | 호출자·실패 처리 |
 | --- | --- | --- |
-| B | TargetProvider.listEnabled(): TargetSummary[]; getForCollection(id): CollectorTarget | A. 삭제/비활성은 수집 생략, 복호화 오류는 실패 스냅샷 |
+| B | TargetProvider.listEnabled(): TargetSummary[]; getForCollection(id): CollectorTarget | A. 삭제/비활성은 수집 생략, 복호화 오류는 `CONNECTION_FAILED`/`INTERNAL_ERROR` 실패 스냅샷 |
 | B | TargetProvider.getMetadata(id,includeDeleted): TargetMetadata | A·C. 조회 전용, 비밀 없음 |
 | B | AuthService.authenticate(token): AuthPrincipal; validateSession(sid): AuthPrincipal | A·C. 공통 인증 오류로 변환 |
 | B | AuditRecorder.record(AuditInput): void | A·C. 변경과 같은 트랜잭션, 실패 시 롤백 |

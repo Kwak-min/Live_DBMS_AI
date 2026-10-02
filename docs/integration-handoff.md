@@ -26,13 +26,15 @@
 
 ### A — 수집·메트릭·발행 기반
 
-- [ ] MetricSchedulerWorker의 위험도/사건 발행/자동 차단 호출 제거. 대상별 중첩 수집 금지, 전체 15초 취소·연결 정리 구현.
-- [ ] B TargetProvider로 암호화된 계정 접근, configVersion 재검증 후 저장, DatabaseConfig 전체 save 제거.
-- [ ] LocalDateTime을 Instant/UTC JSON으로 전환, QPS warmup/reset null, slowQueriesDelta/slowQueriesPerSecond/window·lastSuccessAt·errorCode·unavailableMetrics 추가.
-- [ ] metric+outbox 같은 트랜잭션, eventId 고정 재발행, Redis 실패를 성공으로 처리하지 않음.
-- [ ] 메트릭 최신/최근/이력의 인증·204·404·범위/건수 제한·정렬·반개구간 적용.
-- [ ] Ping의 새 POST 경로와 무상태 진단(정기 수집 상태 미변경), 수동 중단 대상 진단 허용.
-- [ ] Flyway V1/V3·UTC 보관 정리·공통 outbox·환경 문서 구현. V2/V4 변경은 각 담당자와 통합.
+- [x] MetricSchedulerWorker의 위험도/사건 발행/자동 차단 호출 제거. 대상별 중첩 수집 금지, 전체 15초 취소·연결 정리 구현.
+- [x] B TargetProvider로 암호화된 계정 접근, configVersion 재검증 후 저장, DatabaseConfig 전체 save 제거.
+- [x] LocalDateTime을 Instant/UTC JSON으로 전환, QPS warmup/reset null, slowQueriesDelta/slowQueriesPerSecond/window·lastSuccessAt·errorCode·unavailableMetrics 추가.
+- [x] metric+outbox 같은 트랜잭션, eventId 고정 재발행, Redis 실패를 성공으로 처리하지 않음.
+- [x] 메트릭 최신/최근/이력의 인증·204·404·범위/건수 제한·정렬·반개구간 적용.
+- [x] Ping의 새 POST 경로와 무상태 진단(정기 수집 상태 미변경), 수동 중단 대상 진단 허용.
+- [x] Flyway V1/V3·UTC 보관 정리·공통 outbox·환경 문서 구현. V2/V4 변경은 각 담당자와 통합.
+
+검수 근거: 실제 환경 통합 시나리오 [part-a-integration-results.md](part-a-integration-results.md) (T06~T11·T13·T26), 자동 테스트 `backend/gradlew test`. V4 연동은 C PR #15 리뷰에서 기존 데이터 적용과 A 시나리오 회귀로 확인했다.
 
 ### B — 사용자·DB 관리·공통 보안
 

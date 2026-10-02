@@ -9,6 +9,7 @@ PR #2의 인증·DB 관리, PR #11의 C lifecycle 호출은 이미 `develop`에 
 - [x] DB 목록·상세 응답의 `createdAt`/`updatedAt` 및 `lastAttemptAt`/`lastSuccessAt`을 UTC `Instant` JSON (`.SSSZ`)으로 출력.
 - [x] `TargetProvider.listEnabled()`를 비밀 없는 대상 목록으로 변경하고 대상별로 복호화. 한 대상의 복호화 실패가 다른 대상 수집을 막지 않음.
 - [x] 복호화 실패 대상을 `PARTIAL_FAILURE`/`INTERNAL_ERROR` 메트릭·outbox로 기록. 비밀값은 로그/이벤트에 넣지 않음.
+  (2026-10-02 A 후속: 접속 자체를 못 한 관측이므로 `CONNECTION_FAILED`/`INTERNAL_ERROR`로 변경, 표시 상태는 `DOWN`. [events.md](events.md) 참고)
 - [x] 표시용 연결 상태는 성공 `UP`, 접속 실패 `DOWN`, 부분 실패 `UNKNOWN`으로 구분.
 - [x] 전체 테스트 결과를 아래에 기입.
 - [ ] 실제 Docker 통합 실행 결과를 아래에 기입.
