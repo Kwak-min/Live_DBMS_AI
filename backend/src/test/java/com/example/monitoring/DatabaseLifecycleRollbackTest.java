@@ -1,6 +1,8 @@
 package com.example.monitoring;
 
+import com.example.monitoring.database.dto.DatabaseCreateRequest;
 import com.example.monitoring.database.dto.DatabaseUpdateRequest;
+import com.example.monitoring.database.security.TargetAddressPolicy;
 import com.example.monitoring.database.service.DatabaseConfigService;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.lifecycle.port.MonitoringLifecyclePort;
@@ -73,15 +75,27 @@ class DatabaseLifecycleRollbackTest {
     @Autowired private AuditEventRepository auditRepository;
     @Autowired private EntityManager entityManager;
     @MockBean private MonitoringLifecyclePort lifecyclePort;
+    @MockBean private TargetAddressPolicy targetAddressPolicy;
+
+    @Test
+    void lifecycleFailureRollsBackDatabaseCreateAndAudit() {
+        long targetCount = repository.count();
+        long auditCount = auditRepository.count();
+        doThrow(new IllegalStateException("C failed")).when(lifecyclePort).applyChange(any());
+
+        assertThatThrownBy(() -> service.create(new DatabaseCreateRequest(
+                "Created", "db.example.test", 3306, "monitoring", "user", "secret", true)))
+                .isInstanceOf(IllegalStateException.class).hasMessage("C failed");
+        entityManager.clear();
+
+        assertThat(repository.count()).isEqualTo(targetCount);
+        assertThat(auditRepository.count()).isEqualTo(auditCount);
+        verify(lifecyclePort).applyChange(any());
+    }
 
     @Test
     void lifecycleFailureRollsBackDatabaseUpdateAndAudit() {
-        DatabaseConfig config = DatabaseConfig.builder()
-                .name("Original").host("db.example.test").port(3306)
-                .databaseName("monitoring").enabled(true).configVersion(2L).build();
-        config.storeEncryptedUsername(1, new byte[12], new byte[16]);
-        config.storeEncryptedPassword(1, new byte[12], new byte[16]);
-        long id = repository.saveAndFlush(config).getId();
+        long id = persistTarget("Original");
         long auditCount = auditRepository.count();
         DatabaseUpdateRequest request = new DatabaseUpdateRequest();
         request.setConfigVersion(2L);
@@ -97,5 +111,32 @@ class DatabaseLifecycleRollbackTest {
         assertThat(after.getConfigVersion()).isEqualTo(2L);
         assertThat(auditRepository.count()).isEqualTo(auditCount);
         verify(lifecyclePort).applyChange(any());
+    }
+
+    @Test
+    void lifecycleFailureRollsBackDatabaseDeleteAndAudit() {
+        long id = persistTarget("Delete me");
+        long auditCount = auditRepository.count();
+        doThrow(new IllegalStateException("C failed")).when(lifecyclePort).applyChange(any());
+
+        assertThatThrownBy(() -> service.delete(id))
+                .isInstanceOf(IllegalStateException.class).hasMessage("C failed");
+        entityManager.clear();
+
+        DatabaseConfig after = repository.findById(id).orElseThrow();
+        assertThat(after.getEnabled()).isTrue();
+        assertThat(after.getDeletedAt()).isNull();
+        assertThat(after.getConfigVersion()).isEqualTo(2L);
+        assertThat(auditRepository.count()).isEqualTo(auditCount);
+        verify(lifecyclePort).applyChange(any());
+    }
+
+    private long persistTarget(String name) {
+        DatabaseConfig config = DatabaseConfig.builder()
+                .name(name).host("db.example.test").port(3306)
+                .databaseName("monitoring").enabled(true).configVersion(2L).build();
+        config.storeEncryptedUsername(1, new byte[12], new byte[16]);
+        config.storeEncryptedPassword(1, new byte[12], new byte[16]);
+        return repository.saveAndFlush(config).getId();
     }
 }

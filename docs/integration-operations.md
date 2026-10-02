@@ -1,6 +1,6 @@
 # 저장·내부 인터페이스·운영 규격 초안 v0.2
 
-[전체 기준](integration-contract-draft.md) / [API](api.md) / [보안](integration-security.md) / [이벤트](events.md). 아래는 구현할 운영 계약이며 현재 실행 환경을 구성했다는 뜻은 아니다.
+[전체 기준](integration-contract-draft.md) / [API](api.md) / [보안](integration-security.md) / [이벤트](events.md). 아래는 active V4 통합과 이후 운영 경계를 정의하는 계약이며 shared deployment 완료를 뜻하지 않는다.
 
 ## 1. 공통 환경
 
@@ -37,11 +37,12 @@ x는 해당 계열의 배포 시점 패치 버전이며 릴리스 산출물에�
 | TRUSTED_PROXY_CIDRS | 비어 있으면 전달 IP 헤더 전부 무시; 실제 proxy망 명시 | B |
 | WEB_PUSH_VAPID_PUBLIC_KEY / PRIVATE_KEY / SUBJECT | base64url P-256 공개/개인키, 운영 연락 mailto 주소 | C |
 | PUSH_ALLOWED_HOSTS | 보안 문서의 기본 host 집합 | C |
+| REALTIME_ENABLED | 기본 false; A `processed_events`가 준비된 환경에서만 true | C |
 | APP_COLLECTOR_ENABLED / APP_COLLECTOR_FIXED_RATE_MS | true / 5000 | A |
 | APP_METRICS_RETENTION_DAYS | 30, 1~365 | A |
 | LEGACY_TIME_ZONE | 이전 LocalDateTime 자료 마이그레이션 시 원래 JVM timezone, 예 Asia/Seoul | A |
 
-환경 변수는 실행 프로세스/IDE의 환경 또는 배포 secret으로 주입한다. `.env` 자동 로더는 도입하지 않는다. `.env.example`은 키 목록/형식만 제공한다. 기존 JWT_SECRET·JWT_*_EXPIRATION_MS·DB_CONFIG_ENCRYPTION_KEY·NOTIFICATION_WEBHOOK_URL은 v1 계약에서 사용하지 않는다. 토큰 시간은 코드 상수로 통일하고 Webhook은 관리 API로 등록한다. 실제 secret 값은 문서/예제/커밋에 넣지 않는다.
+환경 변수는 실행 프로세스/IDE의 환경 또는 배포 secret으로 주입한다. `.env` 자동 로더는 도입하지 않는다. `.env.example`은 키 목록/형식만 제공한다. 기존 JWT_SECRET·JWT_*_EXPIRATION_MS·DB_CONFIG_ENCRYPTION_KEY와 Webhook URL 환경변수는 v1 계약에서 사용하지 않는다. 토큰 시간은 코드 상수로 통일하고 Webhook은 관리 API로 등록한다. 실제 secret 값은 문서/예제/커밋에 넣지 않는다.
 
 ## 2. 파트 간 내부 서비스 계약
 
@@ -53,7 +54,7 @@ x는 해당 계열의 배포 시점 패치 버전이며 릴리스 산출물에�
 | B | TargetProvider.getMetadata(id,includeDeleted): TargetMetadata | A·C. 조회 전용, 비밀 없음 |
 | B | AuthService.authenticate(token): AuthPrincipal; validateSession(sid): AuthPrincipal | A·C. 공통 인증 오류로 변환 |
 | B | AuditRecorder.record(AuditInput): void | A·C. 변경과 같은 트랜잭션, 실패 시 롤백 |
-| C | MonitoringLifecyclePort.applyChange(TargetChange): void | B. DB 등록/수정/삭제 트랜잭션 안에서 호출, C 상태/정책/사건 갱신까지 원자적 |
+| C | MonitoringLifecyclePort.applyChange(TargetChange): void | B. 필수 의존성. DB 등록/수정/삭제 트랜잭션 안에서 동기 호출하며 C 상태/정책/사건 갱신까지 원자적 |
 | A 공통 기반 | OutboxWriter.append(eventId,type,payload): void | A·B·C. 호출자의 PostgreSQL 트랜잭션에 참여 |
 | A | MetricQueryService.latest(id,configVersion): Metric 또는 null | C. 리플레이 복구/최신 상태 검증 |
 
@@ -69,7 +70,7 @@ B의 쓰기 서비스는 C의 LifecyclePort를 호출하되 C가 참조하는 B 
 - C lifecycle은 생성 시 기본 정책과 stateVersion=1 상태를 만들고, 변경/중단/삭제 시 stateVersion을 증가시킨다. 변경된 configVersion의 lastAttemptAt/lastSuccessAt/latestMetricId를 null로 초기화하고 해당 사유로 OPEN 사건을 종료한다.
 - A는 수집 시작 시 configVersion을 캡처한다. 결과 저장 시 동일 대상 row를 잠그고 현재 configVersion·enabled·deletedAt을 다시 확인한다. 다르면 해당 완료 결과를 폐기하고 외부 이벤트도 발행하지 않는다. 동일하면 메트릭+outbox만 저장한다.
 - C는 MetricCollectedEvent 처리 시 다시 현재 설정 버전을 확인한다. 구 버전 이벤트는 처리 기록 후 ACK하되 최신 상태를 바꾸지 않는다. 최종 상태·사건·outbox는 자신의 트랜잭션으로 저장한다.
-- A가 B의 설정 전체 엔티티를 save하지 않는다. 대상의 현재 연결·시도·성공 표시는 C의 monitoring_states에서 읽고 B의 Database 응답에 결합한다.
+- A가 B의 설정 전체 엔티티를 save하지 않는다. B의 기존 status reads와 A의 `database_configs` 네 칼럼 표시 writer는 metric-driven C state consumer가 live attempt/success/latest metric을 유지할 때까지 그대로 둔다. C lifecycle rows의 관리자 변경 상태만 이 통합에서 기록한다.
 
 ## 3. 저장 모델·소유권
 
@@ -101,7 +102,8 @@ incidents는 `(database_config_id,rule_id) WHERE status='OPEN'` partial unique i
 ## 4. 마이그레이션
 
 - Flyway를 공통 도구로 사용하고 Hibernate ddl-auto=validate로 고정한다. A가 마이그레이션 순서·버전 등록을 관리한다.
-- V1은 기준 커밋의 기존 스키마 생성, V2는 B의 계정/보안/설정 변환, V3는 A의 지표/outbox/중복 처리, V4는 C의 상태/정책/사건/알림이다. 파트는 지정 파일을 소유하고 다른 파트의 migration을 수정하지 않는다. 후속 버전은 통합 브랜치의 마지막 번호+1로 등록한다.
+- V1은 기준 커밋의 기존 스키마 생성, V2는 B의 계정/보안/설정 변환, V3는 A의 지표/outbox/중복 처리, V4는 C의 상태/정책/사건/수신처 구조다. V4는 forward-only이며 V1/V2/V3를 수정하지 않는다. 파트는 지정 파일을 소유하고 후속 버전은 통합 브랜치의 마지막 번호+1로 등록한다.
+- Active V4는 `database_configs`를 `SHARE ROW EXCLUSIVE`로 잠근 뒤 두 named composite key를 만들고 C foreign key를 생성한다. unsafe ID/config version 또는 enabled soft-deleted retained row를 처음 발견하면 target 식별 진단과 함께 migration 전체를 rollback한다. 정상 backfill은 모든 target에 실제 `config_version`을 가진 state 1개와 default policy version 1개를 만들고, enabled/nondeleted에 하나의 millisecond transaction epoch를 공유한다. 역사 metric으로 C 필드를 채우거나 migration lifecycle outbox event를 만들지 않는다.
 - 기존 스키마가 있는 DB는 백업하고 V1 스키마와 일치하는지 검사한 뒤 명시적 Flyway baseline 1을 적용한다. baselineOnMigrate는 false. 다른 스키마는 자동으로 승인/삭제하지 않고 차이를 기록하여 별도 migration으로 보존 변환한다.
 - V2는 기존 평문 username/password를 활성 키로 암호화한 뒤 복호화 왕복 검사를 통과한 행만 전환한다. 전체 성공 후에만 평문 컬럼을 제거한다. 키가 없거나 실패하면 migration 실패·롤백, 부분 완료 서버 기동 금지.
 - 기존 LocalDateTime은 `LEGACY_TIME_ZONE`을 명시해 timestamptz로 변환한다. 원래 timezone을 모르면 시간을 추측해 변환하지 않고 배포를 실패시킨다. 이는 실제 데이터의 입력 정보이며 선택할 설계 항목이 아니다.
@@ -127,7 +129,7 @@ outbox publisher는 1초 주기, 최대 100건, 대상별 생성 순서대로 �
 
 모든 수집 작업은 전체 15초 제한 내에 JDBC statement 취소·connection close로 종료한다. 실행 중인 대상의 다음 tick은 건너뛰며 동시에 두 수집을 하지 않는다. 실패 스냅샷도 가능한 한 PostgreSQL에 저장한다. PostgreSQL이 안 되면 미저장 관측을 Redis에만 먼저 발행하지 않고 운영 오류와 생존 신호를 남긴다.
 
-프로세스 시작 순서: PostgreSQL/Redis 준비 → Flyway 적용 → 필요하면 최초 Admin bootstrap → backend → frontend/proxy. 재시작 시 C는 저장된 상태/OPEN 사건을 읽고 지속 시간 후보를 초기화하며, 알림 작업의 `eligible_at`·`expires_at`·`next_attempt_at`을 복원해 cooldown 대기와 active send/retry 창을 구분한다. delayed worker는 저장된 `expires_at` 이후 작업을 취소하고 재시작을 이유로 만료 시각을 연장하지 않는다. 기존 사건을 INFO로 강제 복구하지 않는다. Redis 지연/누락 중 실시간 전송은 제한되지만 저장된 REST 이력은 조회 가능하다.
+프로세스 시작 순서: 기존 application writer 중지·drain 및 새 binary 준비 전까지 write fence → PostgreSQL/Redis 준비 → V4 Flyway 적용(`database_configs` lock은 migration commit까지 유지) → 필요하면 최초 Admin bootstrap → 새 backend binary → frontend/proxy → writer 재개. DB lock은 migration commit에서 끝나며, old-writer fence는 새 binary가 준비될 때까지 유지한다. 재시작 시 C는 저장된 상태/OPEN 사건을 읽고 지속 시간 후보를 초기화하며, 향후 notification worker가 사용할 `eligible_at`·`expires_at`·`next_attempt_at`을 복원해 cooldown 대기와 active send/retry 창을 구분한다. delayed worker의 만료/재시작 규칙은 future notification worker가 구현할 운영 계약이다. 기존 사건을 INFO로 강제 복구하지 않는다. Redis 지연/누락 중 실시간 전송은 제한되지만 저장된 REST 이력은 조회 가능하다. 이 문서는 handoff만 기록하며 shared deployment 완료를 주장하지 않는다.
 
 최초 v1 전환은 기존 consumer/수집기를 중지하고 PostgreSQL·Redis를 백업한다. 기존 무버전 Stream을 `archive:v0:<UTC기준시각>:<원래키>`로 rename하여 7일 보존하고 같은 기존 이름으로 v1 Stream을 새로 만든다. 보관 복사와 건수 확인 전에는 삭제하지 않는다. 구버전 이벤트를 v1 consumer에 투입하지 않는다. 시간·지표 의미가 달라 자동 무손실 변환을 가정하지 않는다.
 

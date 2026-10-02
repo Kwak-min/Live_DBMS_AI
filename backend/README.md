@@ -1,55 +1,47 @@
 # Backend
 
-백엔드 코드 디렉터리입니다.
+This Spring Boot application runs on JDK 17 with the repository Gradle 8.5 wrapper. Spring Boot remains at 3.2.3 and springdoc at 2.3.0.
 
-- feature/be-auth: 인증·권한 및 모니터링 대상 DB 관리
-- feature/be-collector: DB 수집·메트릭 저장 및 조회
-- feature/be-notification: 실시간 전송·위험도 판단·장애 알림
+## Local runtime
 
-빌드 기준은 Java 17 / Spring Boot 3.2.3 / Gradle Wrapper 8.5입니다. 구현할 공통 환경·실행 순서는 [저장·운영 규격](../docs/integration-operations.md), 파트 간 통신은 [팀 배포용 규격 v0.2](../docs/integration-contract-draft.md)를 따릅니다. 실제 통합 실행 완료를 의미하지 않습니다.
+1. Install JDK 17 and Docker Compose.
+2. From the repository root, run `./scripts/start-local-services.ps1`. Add `-WithMariaDb` when a target MariaDB 10.11 instance is needed.
+3. From `backend`, run `./scripts/run-local.ps1` or set `SPRING_PROFILES_ACTIVE=local` and run `./gradlew.bat bootRun`.
+4. Stop infrastructure with `./scripts/stop-local-services.ps1`. Named volumes remain intact.
 
-## 로컬 실행 환경
+The canonical `docker-compose.yml` publishes PostgreSQL, Redis, and the optional `mariadb-target` only on `127.0.0.1`. Redis uses AOF with `appendfsync everysec` and `maxmemory-policy noeviction`. The local profile binds the backend to `127.0.0.1`; staging and production must use the deployment ingress binding and its controls. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
-저장소 루트의 `docker-compose.yml`로 PostgreSQL 16(5432, monitoring_db), Redis 7.4(6379), 테스트 대상 MariaDB 10.11(13306)을 띄웁니다. Docker Desktop이 필요합니다.
+The checked-in `docker-compose.yml` is the sole local stack with PostgreSQL 16 (`monitoring_db`, `postgres`/`postgres`), Redis 7.4, and a MariaDB 10.11 target on port 13306. Its credentials are local-only and the target is initialized from `infra/local/mariadb-init`. The backend still requires locally generated B signing and encryption keys; never commit those values. CLI authentication calls need `Origin: http://localhost:5173` and the `X-CSRF-Token` returned by `/api/v1/auth/csrf`.
 
-```bash
-docker compose up -d      # 루트에서 실행
-docker compose down -v    # 데이터까지 초기화
-```
+Local defaults connect to PostgreSQL at `localhost:5432/monitoring_db` as `postgres`/`postgres` and to Redis at `localhost:6379` without a password. These defaults exist only in `application-local.yml`. Staging and production must inject all datasource and Redis values, including passwords. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
-앱 기본값(`application.yml`)이 위 PostgreSQL/Redis 주소와 같아서 DB·Redis 접속용 환경 변수는 따로 필요 없습니다. 모니터링 대상으로는 host `127.0.0.1`, port `13306`, 계정 `monitor`/`monitor`를 등록합니다. 이 비밀번호들은 로컬 전용입니다.
+## Migrations
 
-앱 실행에는 B의 비밀값이 필요합니다. 로컬에서 직접 무작위로 만들어 실행 환경에만 넣고 커밋하지 않습니다.
+Flyway owns schema creation and Hibernate uses `ddl-auto=validate`. Automatic baselining and Flyway clean are disabled. `V1__baseline_existing_schema.sql` creates exactly the four current legacy entity tables. Existing databases must be backed up, compared with V1, and explicitly baselined at version 1 only after they match; the application never baselines, drops, or rewrites existing data automatically.
 
-- `SPRING_PROFILES_ACTIVE=local`, `LEGACY_TIME_ZONE=Asia/Seoul`
-- `JWT_SIGNING_KEYS={"local-1":"<base64 32바이트 이상>"}`, `JWT_ACTIVE_KID=local-1`
-- `DB_CONFIG_ENCRYPTION_KEYS={"1":"<base64 정확히 32바이트>"}`, `DB_CONFIG_ACTIVE_KEY_VERSION=1`
-- `TARGET_DB_ALLOWED_CIDRS=127.0.0.1/32,::1/128`, `TARGET_DB_ALLOWED_PORTS=3306,13306`, `AUTH_SECURE_COOKIES=false`
+V1 deliberately preserves historical Java `LocalDateTime` as PostgreSQL `timestamp without time zone`. A's active V3 requires `LEGACY_TIME_ZONE` when legacy metric rows exist and converts them to UTC instants; do not infer an unknown historical zone. Migration ownership is coordinated as V1 legacy/A coordination, V2 Part B, V3 Part A, and active V4 Part C. V4 acquires the target-table lock, validates retained rows, creates the C tables, and backfills exactly one state and version-1 policy per target in one transaction. Invalid retained rows abort the migration without normalization.
 
-CLI로 인증 API를 호출할 때는 `Origin: http://localhost:5173` 헤더와 `/api/v1/auth/csrf`로 받은 `X-CSRF-Token`이 필요합니다.
+The B database write service requires `MonitoringLifecyclePort` and calls it synchronously inside the row-locked write transaction. Lifecycle failures propagate and roll back the B target, audit, C rows, and common outbox together. B response/status reads and A's existing four-column `database_configs` display writer remain in place until a future metric-driven C state consumer is ready to own live status.
 
-## DB 마이그레이션 (Flyway)
+## Common outbox
 
-시스템 DB 스키마는 Flyway로만 변경하며 Hibernate는 `ddl-auto: validate`로 검증만 합니다. 마이그레이션 순서·번호 등록은 A가 관리합니다. V1(A, 기준 스키마) → V2(B) → V3(A) → V4(C). 다른 파트의 migration 파일은 수정하지 않습니다.
+Internal Redis events are recorded with `common.outbox.OutboxWriter` in the same transaction as business data. The writer adds `schemaVersion`, `eventId`, `eventType`, and `publishedAt`, enforces an object payload and the 64 KiB cap, and routes each `OutboxEventType` to its configured stream. Producers pass body fields only and use an ordering key such as `database:12` when per-target order matters. `OutboxPublisher` publishes the single Redis hash field `payload` and retries failures with bounded backoff. Consumers call `ProcessedEventStore.markProcessed` in their business transaction and XACK after commit. `CollectorHeartbeatEvent` is sent directly because stale heartbeats must not be replayed.
 
-- 새(빈) DB: 애플리케이션 기동 시 자동 적용됩니다.
-- 예전 `ddl-auto: update`로 테이블이 이미 만들어진 로컬 DB: `baseline-on-migrate`가 꺼져 있어 기동이 실패합니다(의도된 동작). 테스트 데이터만 있다면 DB를 새로 만드는 것이 가장 간단합니다. 데이터를 보존해야 하면 백업 후 스키마가 V1과 같은지 확인하고 `flyway baseline -baselineVersion=1`을 명시적으로 실행합니다.
-- `MigrationSchemaTest`는 내장 PostgreSQL 16에서 전체 migration을 적용한 뒤 모든 엔티티가 `validate`를 통과하는지, V1 기존 데이터가 최신 버전까지 이전되는지 검증합니다. 새 migration이나 엔티티를 추가하면 이 테스트가 통과해야 합니다. (V1이 기준 엔티티의 Hibernate 생성 스키마와 컬럼·제약·인덱스까지 같다는 점은 PR #4에서 1회 검증했습니다.)
+Spring's shared `ObjectMapper` applies `UtcInstantJacksonConfig`, so event and REST instants use fixed three-digit UTC milliseconds. Do not create a separate mapper bean.
 
-## 공통 outbox (A 제공, A·B·C 사용)
+## Verification and endpoints
 
-Redis로 나가는 내부 이벤트는 직접 발행하지 않고 `common.outbox.OutboxWriter`로 업무 데이터와 같은 트랜잭션에 기록합니다. `OutboxPublisher`가 1초마다 최대 100건을 Redis Stream(hash 필드 `payload` 하나)으로 발행하며, Redis 실패 시 1/2/4/8/16/30초 backoff로 무기한 재시도합니다.
+Run service-free tests with `./gradlew.bat test`; `MigrationSchemaTest` starts embedded PostgreSQL 16 and applies every classpath migration before validating all entities.
 
-```java
-@Transactional
-public void resolve(...) {
-    incidentRepository.save(incident);
-    outboxWriter.append(eventId, OutboxEventType.INCIDENT_RESOLVED, "database:" + databaseConfigId, payloadDto);
-}
-```
+Actuator health details and components are hidden. Dedicated readiness and liveness groups from the operations contract are not wired in this stage. OpenAPI (`/v3/api-docs`) and Swagger UI (`/swagger-ui.html`) are enabled only in the local profile. Part B authentication and database-security APIs are present; realtime transport and consumer beans remain disabled unless `REALTIME_ENABLED=true`.
 
-- 트랜잭션 밖에서 호출하면 예외가 납니다(`Propagation.MANDATORY`).
-- `schemaVersion`·`eventId`·`eventType`·`publishedAt`은 OutboxWriter가 채웁니다. payload DTO에 넣으면 거부됩니다. payload는 JSON 객체, 전체 64KiB 이하입니다.
-- 같은 `orderingKey`(예: `database:12`)의 이벤트는 생성 순서대로 발행됩니다. 재발행해도 eventId는 바뀌지 않으므로 소비자는 `ProcessedEventStore.markProcessed(stream, group, eventId)`를 업무 저장과 같은 트랜잭션에서 호출하고, 커밋 후 XACK합니다. false면 이미 처리한 이벤트입니다.
-- `CollectorHeartbeatEvent`는 outbox를 쓰지 않고 Redis로 직접 발행합니다.
-- 모든 `Instant`는 `YYYY-MM-DDTHH:mm:ss.SSSZ`(UTC, 밀리초 3자리)로 직렬화됩니다(`UtcInstantJacksonConfig`). 별도 `ObjectMapper` 빈을 만들지 말고 Spring이 주입하는 것을 사용하세요.
+The full environment contract and startup order are documented in [integration-operations.md](../docs/integration-operations.md), with security constraints in [integration-security.md](../docs/integration-security.md).
+
+The checked Stage 3 realtime handoff, including active V4, native STOMP frames,
+and the deferred metric-driven live-state boundary, is documented in
+[part-c-realtime.md](../docs/part-c-realtime.md).
+
+For activation, stop and drain old application writers before applying V4; hold
+the database lock until the migration commit completes, then start the new
+binary before allowing writes. This repository documents the handoff only; no
+shared deployment is claimed here.
