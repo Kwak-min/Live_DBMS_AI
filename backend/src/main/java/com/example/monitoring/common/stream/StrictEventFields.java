@@ -112,7 +112,8 @@ public final class StrictEventFields {
             throw invalid(root, "INVALID_FIELD_TYPE", field + " must be text");
         }
         String text = value.textValue();
-        if (text.length() < minimumLength || text.length() > maximumLength) {
+        int codePointLength = text.codePointCount(0, text.length());
+        if (codePointLength < minimumLength || codePointLength > maximumLength) {
             throw invalid(root, "INVALID_FIELD_VALUE", field + " length is invalid");
         }
         return text;

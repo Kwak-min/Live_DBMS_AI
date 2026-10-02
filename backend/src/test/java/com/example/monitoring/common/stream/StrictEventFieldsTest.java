@@ -75,6 +75,22 @@ class StrictEventFieldsTest {
                 "INVALID_NUMERIC_VALUE");
     }
 
+    @Test
+    void countsBoundedTextInUnicodeCodePoints() {
+        String supplementary = "\uD83D\uDE00";
+        ObjectNode root = fields.parseObject(bytes("{}"));
+        String maximum = supplementary.repeat(100);
+        root.put("databaseName", maximum);
+
+        assertThat(fields.requiredText(root, "databaseName", 1, 100)).isEqualTo(maximum);
+
+        root.put("databaseName", supplementary.repeat(101));
+        assertInvalid(
+                root,
+                () -> fields.requiredText(root, "databaseName", 1, 100),
+                "INVALID_FIELD_VALUE");
+    }
+
     private void assertReason(String json, String reason) {
         assertThatThrownBy(() -> fields.parseObject(bytes(json)))
                 .isInstanceOfSatisfying(InvalidStreamRecordException.class,
