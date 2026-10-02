@@ -15,8 +15,14 @@ import java.util.regex.Pattern;
 @Slf4j
 @RequiredArgsConstructor
 public class MutationFailureAuditFilter extends OncePerRequestFilter {
+    private static final long MAX_SAFE_ID = 9_007_199_254_740_991L;
     private static final Pattern USER = Pattern.compile("^/api/v1/users/(\\d+)/(role|status)$");
     private static final Pattern DATABASE = Pattern.compile("^/api/v1/databases/(\\d+)(/ping)?$");
+    private static final int MAX_PART_C_SEGMENT_LENGTH = 64;
+    private static final String POLICY_PREFIX = "/api/v1/databases/";
+    private static final String POLICY_SUFFIX = "/risk-policy";
+    private static final String PUSH_PREFIX = "/api/v1/notifications/push-subscriptions/";
+    private static final String WEBHOOK_PREFIX = "/api/v1/notifications/webhooks/";
     private final AuditEventService auditEventService;
 
     @Override
@@ -30,8 +36,8 @@ public class MutationFailureAuditFilter extends OncePerRequestFilter {
             auditEventService.failureCurrent(target.action(), target.type(), target.targetId(), target.databaseId(),
                     "Request rejected with HTTP " + response.getStatus());
         } catch (RuntimeException exception) {
-            log.error("Failed to persist mutation failure audit. method={}, path={}, status={}",
-                    request.getMethod(), request.getRequestURI(), response.getStatus(), exception);
+            log.error("Failed to persist mutation failure audit. method={}, action={}, status={}",
+                    request.getMethod(), target.action(), response.getStatus(), exception);
         }
     }
 
@@ -58,12 +64,46 @@ public class MutationFailureAuditFilter extends OncePerRequestFilter {
             if ("POST".equals(method) && database.group(2) != null)
                 return new FailureTarget(AuditAction.DATABASE_PING, AuditTargetType.DATABASE, targetId, id);
         }
+        RouteSegment policy = exactSegment(path, POLICY_PREFIX, POLICY_SUFFIX);
+        if ("PUT".equals(method) && policy.matches()) {
+            String targetId = safePartCTargetId(policy.value());
+            return new FailureTarget(AuditAction.POLICY_UPDATED, AuditTargetType.POLICY,
+                    targetId, safeLong(policy.value()));
+        }
+        if ("POST".equals(method) && "/api/v1/notifications/push-subscriptions".equals(path)) {
+            return new FailureTarget(AuditAction.PUSH_REGISTERED,
+                    AuditTargetType.PUSH_SUBSCRIPTION, null, null);
+        }
+        RouteSegment push = exactSegment(path, PUSH_PREFIX, "");
+        if ("DELETE".equals(method) && push.matches()) {
+            return new FailureTarget(AuditAction.PUSH_DELETED,
+                    AuditTargetType.PUSH_SUBSCRIPTION, safePartCTargetId(push.value()), null);
+        }
+        if ("POST".equals(method) && "/api/v1/notifications/webhooks".equals(path)) {
+            return new FailureTarget(AuditAction.WEBHOOK_CREATED, AuditTargetType.WEBHOOK, null, null);
+        }
+        RouteSegment webhook = exactSegment(path, WEBHOOK_PREFIX, "");
+        if (webhook.matches()) {
+            String targetId = safePartCTargetId(webhook.value());
+            if ("PATCH".equals(method)) {
+                return new FailureTarget(AuditAction.WEBHOOK_UPDATED,
+                        AuditTargetType.WEBHOOK, targetId, null);
+            }
+            if ("DELETE".equals(method)) {
+                return new FailureTarget(AuditAction.WEBHOOK_DELETED,
+                        AuditTargetType.WEBHOOK, targetId, null);
+            }
+        }
         return null;
     }
 
     private Long safeLong(String value) {
+        if (value == null) {
+            return null;
+        }
         try {
-            return Long.valueOf(value);
+            long parsed = Long.parseLong(value);
+            return parsed >= 1 && parsed <= MAX_SAFE_ID ? parsed : null;
         } catch (NumberFormatException ignored) {
             return null;
         }
@@ -73,5 +113,28 @@ public class MutationFailureAuditFilter extends OncePerRequestFilter {
         return value.length() <= 255 ? value : value.substring(0, 255);
     }
 
+    private String safePartCTargetId(String value) {
+        return safeLong(value) == null ? null : value;
+    }
+
+    private RouteSegment exactSegment(String path, String prefix, String suffix) {
+        if (!path.startsWith(prefix) || !path.endsWith(suffix)) {
+            return RouteSegment.NO_MATCH;
+        }
+        int start = prefix.length();
+        int end = path.length() - suffix.length();
+        int separator = path.indexOf('/', start);
+        if (end <= start || (separator >= 0 && separator < end)) {
+            return RouteSegment.NO_MATCH;
+        }
+        int length = end - start;
+        String value = length <= MAX_PART_C_SEGMENT_LENGTH ? path.substring(start, end) : null;
+        return new RouteSegment(true, value);
+    }
+
     private record FailureTarget(AuditAction action, AuditTargetType type, String targetId, Long databaseId) { }
+
+    private record RouteSegment(boolean matches, String value) {
+        private static final RouteSegment NO_MATCH = new RouteSegment(false, null);
+    }
 }
