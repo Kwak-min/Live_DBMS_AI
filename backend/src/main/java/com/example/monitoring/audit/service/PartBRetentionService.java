@@ -2,6 +2,7 @@ package com.example.monitoring.audit.service;
 
 import com.example.monitoring.auth.repository.AuthSessionRepository;
 import com.example.monitoring.auth.repository.UsedRefreshTokenRepository;
+import com.example.monitoring.notification.session.PushSubscriptionLifecyclePort;
 import com.example.monitoring.repository.AuditEventRepository;
 import com.example.monitoring.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,12 +19,14 @@ public class PartBRetentionService {
     private final AuditLogRepository accessLogRepository;
     private final UsedRefreshTokenRepository usedRefreshTokenRepository;
     private final AuthSessionRepository authSessionRepository;
+    private final PushSubscriptionLifecyclePort pushSubscriptions;
 
     @Transactional
     public CleanupResult purge(Instant now) {
         long audits = auditEventRepository.deleteByOccurredAtBefore(now.minus(180, ChronoUnit.DAYS));
         long accesses = accessLogRepository.deleteByOccurredAtBefore(now.minus(30, ChronoUnit.DAYS));
         Instant sessionCutoff = now.minus(1, ChronoUnit.DAYS);
+        pushSubscriptions.deactivateSessionsEligibleForRetention(sessionCutoff, now);
         int usedTokens = usedRefreshTokenRepository.deleteForExpiredOrRevokedSessions(sessionCutoff);
         int sessions = authSessionRepository.deleteExpiredOrRevoked(sessionCutoff);
         return new CleanupResult(audits, accesses, usedTokens, sessions);
