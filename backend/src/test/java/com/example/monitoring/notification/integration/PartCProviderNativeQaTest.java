@@ -24,12 +24,21 @@ import com.example.monitoring.notification.webpush.WebPushRequestPreparer;
 import com.example.monitoring.notification.webpush.WebPushSender;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hc.client5.http.ssl.HttpsSupport;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.protocol.HttpContext;
+import org.apache.hc.core5.util.Timeout;
 import org.bouncycastle.crypto.ec.CustomNamedCurves;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -52,6 +61,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.when;
 
 @EnabledIfEnvironmentVariable(named = "PART_C_NATIVE_QA_ENABLED", matches = "true")
@@ -84,9 +95,30 @@ class PartCProviderNativeQaTest {
         int port = requiredPort("PART_C_NATIVE_QA_WEB_PUSH_PORT");
         try (LocalTlsProviderFixture fixture = LocalTlsProviderFixture.start(
                 "fcm.googleapis.com", port,
-                ignored -> LocalTlsProviderFixture.Response.immediate(201, ""))) {
+                ignored -> LocalTlsProviderFixture.Response.immediate(201, ""));
+             var socketBuilder = mockStatic(SSLConnectionSocketFactoryBuilder.class)) {
+            AtomicInteger routedConnections = new AtomicInteger();
+            SSLConnectionSocketFactory sockets = new SSLConnectionSocketFactory(
+                    fixture.clientContext(), HttpsSupport.getDefaultHostnameVerifier()) {
+                @Override
+                public Socket connectSocket(Socket socket, HttpHost host,
+                                            InetSocketAddress remoteAddress, InetSocketAddress localAddress,
+                                            Timeout timeout, Object attachment, HttpContext context) throws IOException {
+                    assertThat(host.getHostName()).isEqualTo("fcm.googleapis.com");
+                    assertThat(host.getPort()).isEqualTo(443);
+                    assertThat(remoteAddress.getAddress()).isEqualTo(InetAddress.getByName("127.0.0.1"));
+                    assertThat(remoteAddress.getPort()).isEqualTo(443);
+                    routedConnections.incrementAndGet();
+                    return super.connectSocket(socket, host,
+                            new InetSocketAddress(remoteAddress.getAddress(), port), localAddress,
+                            timeout, attachment, context);
+                }
+            };
+            SSLConnectionSocketFactoryBuilder builder = mock(SSLConnectionSocketFactoryBuilder.class, RETURNS_SELF);
+            when(builder.build()).thenReturn(sockets);
+            socketBuilder.when(SSLConnectionSocketFactoryBuilder::create).thenReturn(builder);
             AtomicInteger resolutions = new AtomicInteger();
-            PushEndpointPolicy pushPolicy = acceptingPushPolicy();
+            PushEndpointPolicy pushPolicy = new PushEndpointPolicy("");
             PinnedHttpsTransport transport = transport(
                     pushPolicy,
                     mock(SlackWebhookPolicy.class),
@@ -117,7 +149,7 @@ class PartCProviderNativeQaTest {
                     Clock.fixed(NOW, ZoneOffset.UTC));
 
             UUID incidentId = UUID.fromString("d38f135a-34c3-40df-915a-f26b2ebf4162");
-            String endpoint = "https://fcm.googleapis.com:" + port + "/push/native-proof";
+            String endpoint = "https://fcm.googleapis.com/push/native-proof";
             DeliveryOutcome outcome = sender.send(
                     new WebPushRecipient(
                             endpoint,
@@ -136,7 +168,7 @@ class PartCProviderNativeQaTest {
             LocalTlsProviderFixture.Capture capture = fixture.captures().get(0);
             assertThat(capture.method()).isEqualTo("POST");
             assertThat(capture.path()).isEqualTo("/push/native-proof");
-            assertThat(capture.header("Host")).isEqualTo("fcm.googleapis.com:" + port);
+            assertThat(capture.header("Host")).isEqualTo("fcm.googleapis.com");
             assertThat(capture.header("Content-Encoding")).isEqualTo("aes128gcm");
             assertThat(capture.header("TTL")).isEqualTo("600");
             Map<String, Object> payload = WebPushCryptoProof.decryptAndVerify(
@@ -146,7 +178,7 @@ class PartCProviderNativeQaTest {
                     recipientPublic,
                     authSecret,
                     vapidPublic,
-                    "https://fcm.googleapis.com:" + port,
+                    "https://fcm.googleapis.com",
                     subject,
                     MAPPER);
             assertThat(payload)
@@ -168,9 +200,11 @@ class PartCProviderNativeQaTest {
                     "fcm.googleapis.com",
                     new InetAddress[]{InetAddress.getByName("127.0.0.1")}))
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> new PushEndpointPolicy("").validate(endpoint))
+            assertThatThrownBy(() -> new PushEndpointPolicy("").validate(
+                    "https://fcm.googleapis.com:" + port + "/push/native-proof"))
                     .isInstanceOf(IllegalArgumentException.class);
             assertThat(resolutions).hasValue(1);
+            assertThat(routedConnections).hasValue(1);
             assertThat(fixture.captures()).hasSize(1);
 
             PartCNativeQaEvidence.write("webpush-tls.json", Map.of(
@@ -396,13 +430,6 @@ class PartCProviderNativeQaTest {
                         || thread.getName().equals("notification-https-total")
                         || thread.getName().equals("notification-https-request"))
                 .toList();
-    }
-
-    private static PushEndpointPolicy acceptingPushPolicy() {
-        PushEndpointPolicy policy = mock(PushEndpointPolicy.class);
-        when(policy.validate(anyString())).thenAnswer(
-                invocation -> URI.create(invocation.getArgument(0)));
-        return policy;
     }
 
     private static SlackWebhookPolicy acceptingSlackPolicy() {
