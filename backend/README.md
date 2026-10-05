@@ -13,6 +13,16 @@ The canonical `docker-compose.yml` publishes PostgreSQL, Redis, and the optional
 
 The checked-in `docker-compose.yml` is the sole local stack with PostgreSQL 16 (`monitoring_db`, `postgres`/`postgres`), Redis 7.4, and a MariaDB 10.11 target on port 13306. Its credentials are local-only and the target is initialized from `infra/local/mariadb-init`. The backend still requires locally generated B signing and encryption keys; never commit those values. CLI authentication calls need `Origin: http://localhost:5173` and the `X-CSRF-Token` returned by `/api/v1/auth/csrf`.
 
+### Frontend handoff (Part B authentication)
+
+The local frontend origin is `http://localhost:5173` (`PUBLIC_ORIGIN`), and the backend listens on `127.0.0.1:8080`. The Vite development server must proxy `/api` and `/ws` to `http://127.0.0.1:8080` (`ws: true` for `/ws`). Frontend requests use relative `/api/v1/...` URLs and same-origin credentials; use `ws://localhost:5173/ws` for STOMP. Do not call port 8080 directly from browser code: the local authentication contract uses a same-origin proxy, not credentialed cross-origin CORS. Use `localhost` consistently in the browser, not `127.0.0.1` for one side and `localhost` for the other.
+
+The `refreshToken` and `csrfSession` cookies are host-only, HttpOnly, `SameSite=Lax`, and scoped to `/api/v1/auth`. Under the `local` profile only, `AUTH_SECURE_COOKIES=false` permits HTTP; other profiles default to Secure cookies and require HTTPS. Both cookie names and values stay out of frontend JavaScript. Fetch `GET /api/v1/auth/csrf` through the proxy before signup/login/refresh/logout; send its returned token as `X-CSRF-Token`. Keep the access token in memory. The backend compares authentication request `Origin` with `PUBLIC_ORIGIN`.
+
+To create the first administrator on an empty local database, start PostgreSQL and Redis, set locally generated `JWT_SIGNING_KEYS`, `JWT_ACTIVE_KID`, `DB_CONFIG_ENCRYPTION_KEYS`, and `DB_CONFIG_ACTIVE_KEY_VERSION` in the backend process environment (see `.env.example`), then set `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, and `BOOTSTRAP_ADMIN_DISPLAY_NAME`. Run `SPRING_PROFILES_ACTIVE=local,bootstrap-admin` with `./gradlew.bat bootRun` from `backend`; this one-shot process does not open HTTP. Remove the three bootstrap variables and start the normal server with `./scripts/run-local.ps1`. There is no checked-in seed account. Ordinary signup creates a USER account. Never put actual signing, encryption, or admin secrets in source files or shared messages.
+
+The B user and database response DTOs expose `Instant` timestamps, and the shared JSON mapper writes `YYYY-MM-DDTHH:mm:ss.SSSZ`. This is covered by `DatabaseResponseTest`; the frontend should still confirm the value against a live response during integration. `VITE_USE_MOCK=false` and the Vite proxy configuration belong to the frontend project, which is not stored in this repository.
+
 Local defaults connect to PostgreSQL at `localhost:5432/monitoring_db` as `postgres`/`postgres` and to Redis at `localhost:6379` without a password. These defaults exist only in `application-local.yml`. Staging and production must inject all datasource and Redis values, including passwords. The application does not load `.env`; `backend/.env.example` is a key and format reference.
 
 ## Migrations
