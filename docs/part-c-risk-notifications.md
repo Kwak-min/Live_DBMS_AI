@@ -73,7 +73,7 @@ separate evidence gates.
 ## Verification handoff
 
 After the docs, fixture, and contract test are frozen, run the exact selector
-`..\\gradlew.bat test --tests
+`.\gradlew.bat test --tests
 "com.example.monitoring.contract.PartCDocumentationContractTest"` from
 `backend`, then run the native QA command in `docs/integration-operations.md`
 with caller-supplied tool roots and an evidence directory. Resolve the tested
