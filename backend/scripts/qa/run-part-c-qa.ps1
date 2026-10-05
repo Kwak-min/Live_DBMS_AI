@@ -272,6 +272,7 @@ function Invoke-BoundedProcess(
     Add-Journal "COMMAND_START name=$Name utc=$([datetime]::UtcNow.ToString('o')) file=$FilePath args=$($Arguments -join ' ')"
     $Process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
+    $ProcessHandle = $Process.Handle
     $OwnedProcesses.Add($Process)
     if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
         Stop-Process -Force -Id $Process.Id -ErrorAction SilentlyContinue
@@ -279,14 +280,15 @@ function Invoke-BoundedProcess(
         throw "Command timed out after $TimeoutSeconds seconds: $Name"
     }
     $Process.WaitForExit()
-    $Process.Refresh()
-    Add-Journal "COMMAND_END name=$Name utc=$([datetime]::UtcNow.ToString('o')) pid=$($Process.Id) exit=$($Process.ExitCode)"
-    Assert-True ($Process.ExitCode -in $AllowedExitCodes) `
-        "$Name exited $($Process.ExitCode); allowed: $($AllowedExitCodes -join ',')"
+    $ProcessExitCode = $Process.ExitCode
+    Assert-True ($null -ne $ProcessExitCode) "$Name exit code was unavailable"
+    Add-Journal "COMMAND_END name=$Name utc=$([datetime]::UtcNow.ToString('o')) pid=$($Process.Id) exit=$ProcessExitCode"
+    Assert-True ($ProcessExitCode -in $AllowedExitCodes) `
+        "$Name exited $ProcessExitCode; allowed: $($AllowedExitCodes -join ',')"
     return [ordered]@{
         name = $Name
         pid = $Process.Id
-        exitCode = $Process.ExitCode
+        exitCode = $ProcessExitCode
         stdout = (Get-RelativePath $Evidence $StdoutPath).Replace('\', '/')
         stderr = (Get-RelativePath $Evidence $StderrPath).Replace('\', '/')
     }
@@ -643,6 +645,7 @@ function Invoke-Bootstrap([string]$Label, [string]$Jar, [bool]$ShouldSucceed) {
     $Process = Start-Process -FilePath $Java -ArgumentList @(
         '-jar', $Jar, '--spring.profiles.active=bootstrap-admin', "--server.port=$($Ports.Bootstrap)"
     ) -WindowStyle Hidden -PassThru -RedirectStandardOutput $Out -RedirectStandardError $Err
+    $ProcessHandle = $Process.Handle
     $OwnedProcesses.Add($Process)
     $ListenerObserved = $false
     $Deadline = [datetime]::UtcNow.AddSeconds(90)
@@ -659,17 +662,19 @@ function Invoke-Bootstrap([string]$Label, [string]$Jar, [bool]$ShouldSucceed) {
         throw "Bootstrap $Label timed out"
     }
     $Process.WaitForExit()
+    $ProcessExitCode = $Process.ExitCode
+    Assert-True ($null -ne $ProcessExitCode) "Bootstrap $Label exit code was unavailable"
     if ($ShouldSucceed) {
-        Assert-True ($Process.ExitCode -eq 0) "Bootstrap $Label exited $($Process.ExitCode), expected zero"
+        Assert-True ($ProcessExitCode -eq 0) "Bootstrap $Label exited $ProcessExitCode, expected zero"
     }
     else {
-        Assert-True ($Process.ExitCode -ne 0) "Bootstrap $Label unexpectedly exited zero"
+        Assert-True ($ProcessExitCode -ne 0) "Bootstrap $Label unexpectedly exited zero"
     }
     Assert-True (-not $ListenerObserved) "Bootstrap $Label opened an HTTP listener"
     return [ordered]@{
         label = $Label
         pid = $Process.Id
-        exitCode = $Process.ExitCode
+        exitCode = $ProcessExitCode
         listenerObserved = $ListenerObserved
         stdout = (Get-RelativePath $Evidence $Out).Replace('\', '/')
         stderr = (Get-RelativePath $Evidence $Err).Replace('\', '/')
@@ -913,14 +918,14 @@ function Save-FinalReports([bool]$Success, [string]$Failure) {
         gradleUserHome = (Get-RelativePath $Repo $GradleUserHome).Replace('\', '/')
         ports = $Ports
         phases = $PhaseSummaries
-        cleanup = [ordered]@{ ports = $Cleanup; ownedProcesses = @($Owned); receipts = @($CleanupResults) }
+        cleanup = [ordered]@{ ports = $Cleanup; ownedProcesses = @($Owned); receipts = $CleanupResults.ToArray() }
         failure = if ([string]::IsNullOrWhiteSpace($Failure)) { $null } else { $Failure }
     }
     Write-Utf8NoBom $ManifestPath ($Manifest | ConvertTo-Json -Depth 12)
     $Adversarial = [ordered]@{
         schemaVersion = 1
         head = $ExpectedHead.ToLowerInvariant()
-        results = @($AdversarialResults)
+        results = $AdversarialResults.ToArray()
         cleanup = $Manifest.cleanup
     }
     Write-Utf8NoBom $AdversarialPath ($Adversarial | ConvertTo-Json -Depth 10)
@@ -963,7 +968,7 @@ function Invoke-CleanupVerification {
         ports = $PortChecks
         recordedOwnedProcessCount = @($Prior.cleanup.ownedProcesses).Count
         recordedAliveProcessCount = $RecordedAlive.Count
-        badCleanupReceipts = @($BadReceipts)
+        badCleanupReceipts = $BadReceipts.ToArray()
         preservedManifestSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $ManifestPath).Hash.ToLowerInvariant()
     }
     $Path = Join-Path $Evidence 'cleanup-verification.json'
@@ -1225,7 +1230,7 @@ finally {
         }
     }
     try {
-        $AdversarialResults.Add([ordered]@{ scenario = 'owned-process-port-cleanup'; passed = ($ExitCode -eq 0); observable = @($CleanupResults) })
+        $AdversarialResults.Add([ordered]@{ scenario = 'owned-process-port-cleanup'; passed = ($ExitCode -eq 0); observable = $CleanupResults.ToArray() })
         Save-FinalReports ($ExitCode -eq 0) $Failure
         $SecretReceipt = Scrub-Evidence
         $PhaseSummaries.secretScan = $SecretReceipt
