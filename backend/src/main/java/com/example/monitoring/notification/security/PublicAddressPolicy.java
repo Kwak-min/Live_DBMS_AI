@@ -69,7 +69,9 @@ public final class PublicAddressPolicy {
                 && unsigned(value[2]) == 0x0d && unsigned(value[3]) == 0xb8;
         boolean sixToFour = unsigned(value[0]) == 0x20 && unsigned(value[1]) == 0x02;
         boolean oldSixBone = unsigned(value[0]) == 0x3f && unsigned(value[1]) == 0xfe;
-        if (!globalUnicast || ianaSpecial || documentation || sixToFour || oldSixBone) {
+        boolean extendedDocumentation = unsigned(value[0]) == 0x3f && unsigned(value[1]) == 0xff
+                && (unsigned(value[2]) & 0xf0) == 0;
+        if (!globalUnicast || ianaSpecial || documentation || extendedDocumentation || sixToFour || oldSixBone) {
             throw invalid();
         }
     }

@@ -11,6 +11,18 @@ class PublicAddressPolicyTest {
     private final PublicAddressPolicy policy = new PublicAddressPolicy();
 
     @Test
+    void rejectsNewDocumentationPrefixAndPreservesNeighboringGlobalRange() throws Exception {
+        for (String value : new String[] {"3fff::", "3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff"}) {
+            InetAddress address = InetAddress.getByName(value);
+            assertThatThrownBy(() -> policy.requirePublic(address))
+                    .as(value).isInstanceOf(IllegalArgumentException.class);
+        }
+        for (String value : new String[] {"3fff:1000::", "3fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"}) {
+            assertThatCode(() -> policy.requirePublic(InetAddress.getByName(value)))
+                    .as(value).doesNotThrowAnyException();
+        }
+    }
+    @Test
     void acceptsGloballyRoutableAddresses() throws Exception {
         assertThatCode(() -> policy.requirePublic(InetAddress.getByName("8.8.8.8")))
                 .doesNotThrowAnyException();

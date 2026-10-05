@@ -61,6 +61,23 @@ class PinnedHttpsTransportPolicyTest {
         assertThat(outbound.lastAddresses()).containsExactly(publicAddress);
     }
 
+    @Test
+    void rejectsDocumentationDnsAnswerBeforeHttpExecutor() throws Exception {
+        InetAddress documentationAddress = InetAddress.getByName("3fff::1");
+        RecordingExecutor outbound = new RecordingExecutor();
+        PinnedHttpsTransport transport = new PinnedHttpsTransport(
+                new PushEndpointPolicy(""), new SlackWebhookPolicy(),
+                host -> new InetAddress[] {documentationAddress}, resolutions,
+                new PublicAddressPolicy(), outbound);
+        PinnedHttpsRequest request = new PinnedHttpsRequest(
+                NotificationProvider.WEB_PUSH, URI.create("https://fcm.googleapis.com/push/policy-fixture"),
+                "POST", Map.of(), new byte[0], Duration.ofSeconds(1));
+
+        assertThatThrownBy(() -> transport.execute(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Resolved notification destination is not public.");
+        assertThat(outbound.calls()).isZero();
+    }
     private static final class RecordingExecutor implements PinnedHttpExecutor {
         private final AtomicInteger calls = new AtomicInteger();
         private PinnedHttpsRequest lastRequest;
