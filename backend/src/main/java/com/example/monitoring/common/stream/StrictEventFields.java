@@ -59,6 +59,9 @@ public final class StrictEventFields {
             String reason = exception.getOriginalMessage().contains("Duplicate field")
                     ? "DUPLICATE_JSON_KEY" : "INVALID_JSON";
             throw new InvalidStreamRecordException(reason, "Event payload is not valid JSON", null, exception);
+        } catch (NumberFormatException exception) {
+            throw new InvalidStreamRecordException(
+                    "INVALID_NUMERIC_VALUE", "Event payload contains an unrepresentable number", null, exception);
         } catch (IOException exception) {
             throw new InvalidStreamRecordException(
                     "INVALID_JSON", "Event payload is not valid JSON", null, exception);
