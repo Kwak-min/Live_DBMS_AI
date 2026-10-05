@@ -334,22 +334,54 @@ public class RiskJdbcStore {
         }
         Instant at = requiredMillis(scannedAt, "scannedAt");
         return jdbc.query("""
-                SELECT s.database_config_id,
-                       date_trunc('milliseconds',
-                           COALESCE(s.last_attempt_at, s.activation_at)
-                           + p.stale_after_seconds * INTERVAL '1 second') AS due_at
+                SELECT s.database_config_id, deadline.due_at
                 FROM monitoring_states s
                 JOIN risk_policies p ON p.database_config_id = s.database_config_id
+                LEFT JOIN LATERAL (
+                    SELECT m.collection_attempt_time AS last_attempt_at
+                    FROM metric_data m
+                    WHERE m.database_config_id = s.database_config_id
+                      AND m.config_version = s.config_version
+                      AND m.collection_attempt_time >= s.activation_at
+                      AND m.collection_attempt_time <= ?
+                      AND m.timestamp >= s.activation_at AND m.timestamp <= ?
+                    ORDER BY m.timestamp DESC, m.id DESC
+                    LIMIT 1
+                ) durable ON true
+                CROSS JOIN LATERAL (
+                    SELECT date_trunc('milliseconds',
+                        GREATEST(COALESCE(s.last_attempt_at, s.activation_at),
+                                 durable.last_attempt_at)
+                        + p.stale_after_seconds * INTERVAL '1 second') AS due_at
+                ) deadline
                 WHERE s.enabled = true
                   AND s.deleted = false
                   AND s.data_freshness <> 'STALE'
                   AND ? >= COALESCE(s.last_attempt_at, s.activation_at)
                            + p.stale_after_seconds * INTERVAL '1 second'
+                  AND ? >= deadline.due_at
                 ORDER BY due_at, s.database_config_id
                 LIMIT ?
                 """, (rs, ignored) -> new StaleCandidate(
                 rs.getLong("database_config_id"), instant(rs, "due_at")),
-                timestamp(at), limit);
+                timestamp(at), timestamp(at), timestamp(at), timestamp(at), limit);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Instant> latestDurableAttempt(RiskState state, Instant scannedAt) {
+        List<Instant> latest = jdbc.query("""
+                SELECT collection_attempt_time
+                FROM metric_data
+                WHERE database_config_id = ? AND config_version = ?
+                  AND collection_attempt_time >= ? AND collection_attempt_time <= ?
+                  AND timestamp >= ? AND timestamp <= ?
+                ORDER BY timestamp DESC, id DESC
+                LIMIT 1
+                """, (rs, ignored) -> instant(rs, "collection_attempt_time"),
+                state.databaseConfigId(), state.configVersion(),
+                timestamp(state.activationAt()), timestamp(requiredMillis(scannedAt, "scannedAt")),
+                timestamp(state.activationAt()), timestamp(requiredMillis(scannedAt, "scannedAt")));
+        return latest.stream().findFirst();
     }
 
     private RowMapper<RiskState> stateMapper() {
