@@ -1,6 +1,6 @@
 # Part C realtime integration handoff
 
-This is the checked-source handoff for the Part C realtime slice on active V4.
+This is the checked-source handoff for the Part C realtime slice with V1-V5 migrations.
 It describes the current metric stream path, lifecycle boundary, and the
 metric-driven live-state consumer. It is an implementation handoff, not a
 release or deployment approval.
@@ -8,7 +8,7 @@ release or deployment approval.
 ## Candidate and migration status
 
 The Part C backend is based on the merged Actual A V3 baseline with the forward-
-only C V4 migration. B production database callers require the synchronous
+only C V4 migration and additive private V5 success receipts. B production database callers require the synchronous
 `MonitoringLifecyclePort` inside their existing write transaction. This
 document records source and contract boundaries; environment migration activation
 and native acceptance remain separate evidence gates.
@@ -19,14 +19,15 @@ The migration order is deliberately:
 B V2 (auth, sessions, database credential columns)
     -> A V3 (metric and common event infrastructure, including processed_events)
     -> C V4 (active Part C tables)
+    -> C V5 (private notification success receipts)
 ```
 
 The application's migration locations contain the canonical V1 baseline, B V2,
-Actual A V3, and active C V4. A V3 creates the production `event_outbox` and
+Actual A V3, active C V4, and private C V5 success receipts. A V3 creates the production `event_outbox` and
 `processed_events` tables and migrates A metric timestamps to `TIMESTAMPTZ`,
 represented by `Instant` in the A model. V4 adds the named composite keys,
 creates the seven C tables, and initializes retained targets transactionally.
-There is no second staged production copy and V1/V2/V3 remain unchanged.
+There is no second staged production copy and V1-V4 remain unchanged by V5.
 
 The `processed_events` table is A-owned production infrastructure supplied by
 V3. The full Stage 3 integration runs against that Actual A V3 table; isolated
@@ -52,8 +53,8 @@ the writer's envelope creation time.
 
 V4 retained-target initialization uses one millisecond transaction epoch for
 enabled, nondeleted targets, preserves historical metrics without seeding C
-state, and emits no synthetic lifecycle outbox events. A future `cg:risk`
-consumer owns metric-driven state updates after that epoch.
+state, and emits no synthetic lifecycle outbox events. The implemented `cg:risk`
+consumer owns metric-driven state updates after that epoch when risk is enabled.
 
 The PR6 interface and DTO contract remains canonical and unchanged. Contract
 handoff commit `3586788` is published and merged into `develop`; this checkout
@@ -110,16 +111,18 @@ newer than the baseline, read again after two seconds, and reconcile every 30
 seconds. Use the metric history endpoint to fill chart gaps after reconnects;
 keep metric, status, and incident ordering cursors separate. The current
 branch's A metric controllers expose `/api/v1/metrics/{dbId}/latest`,
-`recent`, and `history`; the status and incident REST producers are still C
-work and are not claimed as available by this handoff.
+`recent`, and `history`. C implements `GET /api/v1/databases/{id}/status`,
+`GET /api/v1/incidents`, and `GET /api/v1/incidents/{incidentId}` for the
+status and incident baseline.
 
-V4 lifecycle changes do write durable C state and status outbox rows for B
-create/update/pause/resume/delete operations. A future `cg:risk` metric
-consumer must establish the live C attempt/success/latest-metric fields and
-must reject pre-activation historical metrics; until that consumer exists, B
-keeps its existing status reads and A keeps the four-column
-`database_configs` display writer. This handoff therefore does not claim that
-risk/stale/notification status is being evaluated or delivered.
+V4 lifecycle changes write durable C state and status outbox rows for B
+create/update/pause/resume/delete operations. The implemented `cg:risk` metric
+consumer maintains C attempt/success/latest-metric fields and rejects
+pre-activation historical metrics. Risk, stale evaluation, and notification
+workers are implemented behind their respective enablement flags; final native
+acceptance remains incomplete. B keeps its existing status reads and A keeps
+the four-column `database_configs` display writer after native QA as well,
+until the teams explicitly coordinate a separate ownership switch.
 
 ## Authentication and native STOMP
 
@@ -255,7 +258,7 @@ $env:STAGE3_APP_PORT = '18093'
 ```
 
 That class uses the Actual A V3 `processed_events` and `event_outbox` tables,
-asserts active Flyway versions `1`, `2`, `3`, and `4`, seeds a user and three
+asserts active Flyway versions `1`, `2`, `3`, `4`, and `5`, seeds a user and three
 target rows, and uses the configured Stage 3 stream (default
 `stream:stage3-integration`). Isolated consumer tests mirror `processed_events`
 inline with `VARCHAR(128)` stream and consumer-group columns. Run the full
@@ -330,5 +333,6 @@ The public Web Push navigation field is `url` with a same-origin relative value
 such as `/incidents/<UUID>`. The service-worker implementation and browser
 permission flow remain frontend responsibilities. The existing A
 `processed_events` table, metric path, B status reads, and A four-column
-`database_configs` display writer remain in place until the relevant C consumer
-has passed the native gate.
+`database_configs` display writer remain in place after the native gate as well.
+Passing QA does not authorize an ownership change; a separate team-coordinated
+switch is required.

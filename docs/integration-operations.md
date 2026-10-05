@@ -1,6 +1,6 @@
 # 저장·내부 인터페이스·운영 규격 초안 v0.2
 
-[전체 기준](integration-contract-draft.md) / [API](api.md) / [보안](integration-security.md) / [이벤트](events.md). 아래는 active V4 통합과 이후 운영 경계를 정의하는 계약이며 shared deployment 완료를 뜻하지 않는다.
+[전체 기준](integration-contract-draft.md) / [API](api.md) / [보안](integration-security.md) / [이벤트](events.md). 아래는 active V4 및 additive private V5 통합과 이후 운영 경계를 정의하는 계약이며 shared deployment 완료를 뜻하지 않는다.
 
 ## 1. 공통 환경
 
@@ -72,7 +72,7 @@ B의 쓰기 서비스는 C의 LifecyclePort를 호출하되 C가 참조하는 B 
 - C lifecycle은 생성 시 기본 정책과 stateVersion=1 상태를 만들고, 변경/중단/삭제 시 stateVersion을 증가시킨다. 변경된 configVersion의 lastAttemptAt/lastSuccessAt/latestMetricId를 null로 초기화하고 해당 사유로 OPEN 사건을 종료한다.
 - A는 수집 시작 시 configVersion을 캡처한다. 결과 저장 시 동일 대상 row를 잠그고 현재 configVersion·enabled·deletedAt을 다시 확인한다. 다르면 해당 완료 결과를 폐기하고 외부 이벤트도 발행하지 않는다. 동일하면 메트릭+outbox만 저장한다.
 - C는 MetricCollectedEvent 처리 시 다시 현재 설정 버전을 확인한다. 구 버전 이벤트는 처리 기록 후 ACK하되 최신 상태를 바꾸지 않는다. 최종 상태·사건·outbox는 자신의 트랜잭션으로 저장한다.
-- A가 B의 설정 전체 엔티티를 save하지 않는다. B의 기존 status reads와 A의 `database_configs` 네 칼럼 표시 writer는 metric-driven C state consumer가 live attempt/success/latest metric을 유지할 때까지 그대로 둔다. C lifecycle rows의 관리자 변경 상태만 이 통합에서 기록한다.
+- A가 B의 설정 전체 엔티티를 save하지 않는다. B의 기존 status reads와 A의 `database_configs` 네 칼럼 표시 writer는 C consumer 활성화와 native QA 통과 뒤에도 별도의 팀 간 소유권 전환 합의 전까지 그대로 둔다. 구현된 C consumer는 활성화 후 live attempt/success/latest metric과 위험 상태·사건을 기록하며, lifecycle은 관리자 설정 변경을 같은 트랜잭션에서 반영한다. 최종 native acceptance는 아직 완료되지 않았다.
 
 ## 3. 저장 모델·소유권
 

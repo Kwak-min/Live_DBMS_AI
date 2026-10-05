@@ -1,13 +1,15 @@
 # Part C data foundation
 
-This document defines the activated V4 storage boundary for Part C. It records
-the durable state, policy, incident, recipient, and delivery schema used by the
-current integration. V4 does not claim a risk-evaluation engine, notification
-delivery worker, or a live-status read switch.
+This document defines the activated V4 storage boundary and additive private V5
+receipt for Part C. It records the durable state, policy, incident, recipient,
+and delivery schema used by the current integration. Risk evaluation, realtime,
+and notification workers are implemented behind independent flags; this handoff
+does not claim final native acceptance or a live-status ownership switch.
 
 ## Current candidate status
 
-The active Flyway inventory is A V1, B V2, A V3, and C V4. V3 owns the
+The active Flyway inventory is A V1, B V2, A V3, C V4, and the additive private
+C V5 notification success receipts. V3 owns the
 production `event_outbox` and `processed_events` tables and migrates metric
 timestamps to `TIMESTAMPTZ`, represented by `Instant` in the A model. V4 adds
 the named `UNIQUE (sid, user_id)` and `UNIQUE (id, database_config_id)` keys
@@ -93,7 +95,7 @@ The backfill validates postconditions for target/state/policy counts, exact
 target IDs and versions, state coherence, and policy defaults. It uses one
 millisecond transaction epoch for all applicable activations. It does not call
 the lifecycle `CREATED` action, seed from historical metrics, or write
-migration outbox events. Any later `cg:risk` consumer must reject metrics from
+migration outbox events. The implemented `cg:risk` consumer rejects metrics from
 before the activation epoch when deciding current C state.
 
 The integrated application keeps the Stage 3 realtime beans disabled by default with
@@ -189,7 +191,8 @@ process-lifetime PostgreSQL session advisory lease with JVM non-overlap; no
 business row lock is held across HTTP.
 
 The existing A `database_configs` display writer and B status reads remain the
-owners until the metric-driven C state consumer is activated. V1-V4 remain
+owners after C consumer activation and native QA as well, until the teams
+explicitly coordinate a separate ownership switch. V1-V4 remain
 immutable. The backend uses one additive private V5
 `notification_success_receipts` compact success receipt; it does not add a
 physical `eligible_at` column or another schema change. The receipt is internal
