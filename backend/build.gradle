@@ -27,6 +27,14 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation('nl.martijndwars:web-push:5.1.2') {
+        exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+        exclude group: 'org.asynchttpclient', module: 'async-http-client'
+        exclude group: 'com.beust', module: 'jcommander'
+    }
+    implementation 'org.bitbucket.b_c:jose4j:0.9.6'
+    implementation 'org.apache.httpcomponents:httpasyncclient:4.1.5'
+    implementation 'org.apache.httpcomponents.client5:httpclient5'
 
     // Data JPA (PostgreSQL System DB) & Redis (Redis Streams MQ)
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -48,6 +56,7 @@ dependencies {
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
     testImplementation 'io.zonky.test:embedded-postgres:2.0.7'
     testImplementation enforcedPlatform('io.zonky.test.postgres:embedded-postgres-binaries-bom:16.4.0')
 }

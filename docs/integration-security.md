@@ -79,7 +79,7 @@ B가 MariaDB username/password 및 Slack URL, Web Push endpoint/keys를 암호�
 | 길이 | 입력 byte 길이 + tag 16byte; 암호문을 varchar(255)에 저장하지 않음 |
 | 키 교체 | 새 쓰기는 활성 키, 기존은 원래 keyVersion으로 읽기. 행 단위 재암호화 후 남은 구 버전이 0임을 확인하고 구 키 제거 |
 
-접속 정보는 B의 내부 TargetProvider만 복호화하며 A의 JDBC 연결 범위에서만 사용한다. 일반 REST/Redis/DTO의 toString/예외에 포함하지 않는다. 다른 파트가 DatabaseConfig.password를 직접 읽는 경로는 제거한다. 복호화 실패는 수집 대상별 PARTIAL_FAILURE+INTERNAL_ERROR, 관리자 로그에는 대상 ID와 keyVersion만 기록한다.
+접속 정보는 B의 내부 TargetProvider만 복호화하며 A의 JDBC 연결 범위에서만 사용한다. 일반 REST/Redis/DTO의 toString/예외에 포함하지 않는다. 다른 파트가 DatabaseConfig.password를 직접 읽는 경로는 제거한다. 복호화할 수 없는 대상 credential은 수집 대상별 `collectionStatus=CONNECTION_FAILED`와 `errorCode=INTERNAL_ERROR`로 기록한다. 연결을 시작하지 못해 측정할 시도가 없으면 `responseTimeMs=0`이며 상태는 `DOWN`, 원인은 `CONNECTION_FAILURE`로 공개한다. 관리자 로그에는 대상 ID와 keyVersion만 남기고 credential·암호문·예외 원문은 남기지 않는다.
 
 ## 7. 서버가 접속하는 주소와 로그
 
@@ -87,6 +87,7 @@ B가 MariaDB username/password 및 Slack URL, Web Push endpoint/keys를 암호�
 - 운영 MariaDB 연결은 TLS 인증서·호스트 검증을 켠다. 로컬 테스트 컨테이너만 local 프로필에서 비TLS를 허용한다. 수집 계정은 SELECT 및 상태 조회에 필요한 최소 권한, 변경 SQL 권한을 부여하지 않는다.
 - Slack URL은 `https://hooks.slack.com/services/<세 경로 요소>`만 허용, userinfo/query/fragment/임의 포트 금지. redirect 금지, 요청 시간 제한 5초.
 - Push endpoint는 HTTPS/443, userinfo/fragment 금지, redirect 금지. 기본 허용 host는 fcm.googleapis.com, updates.push.services.mozilla.com, web.push.apple.com, notify.windows.com의 하위 도메인. suffix 비교는 점 경계로 수행한다. 실제 연결 시 public IP만 허용하며 loopback/private/link-local/메타데이터 주소를 거절한다. 새 공급자 지원은 배포 설정의 명시적 허용 목록 변경으로만 추가한다.
+- Push endpoint query strings are opaque provider data and remain allowed after the HTTPS/443, host, public-address, redirect, and timeout checks. Slack Incoming Webhook URLs reject query strings, fragments, userinfo, non-default ports, and path deviations. A provider/mobile or real-device acceptance result is outside this backend handoff.
 - X-Forwarded-For는 TCP 직전 주소가 `TRUSTED_PROXY_CIDRS`인 경우에만 사용하고 오른쪽부터 trusted hop을 제거한 첫 미신뢰 IP를 사용한다. 그 외에는 remoteAddr. Proxy-Client-IP 등 기존 대체 헤더는 무시한다.
 - 감사 action은 USER_SIGNUP, USER_LOGIN, USER_LOGOUT, USER_ROLE_CHANGED, USER_STATUS_CHANGED, DATABASE_CREATED, DATABASE_UPDATED, DATABASE_DELETED, DATABASE_PING, POLICY_UPDATED, PUSH_REGISTERED, PUSH_DELETED, WEBHOOK_CREATED, WEBHOOK_UPDATED, WEBHOOK_DELETED다. 실패도 result=FAILURE로 기록한다. Refresh 성공은 감사 대신 보안 세션 회전 기록에 남긴다.
 - 성공한 관리 변경과 감사는 같은 PostgreSQL 트랜잭션이다. 감사 실패면 변경도 롤백한다. 거절/실패 감사는 원래 변경 트랜잭션이 롤백된 뒤 별도 트랜잭션으로 기록하여 실패 기록까지 사라지지 않게 한다. 일반 GET access log 저장 실패는 응답을 실패시키지 않고 구조화 운영 로그에 경고한다.

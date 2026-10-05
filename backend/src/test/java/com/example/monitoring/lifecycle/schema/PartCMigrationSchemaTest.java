@@ -58,7 +58,7 @@ class PartCMigrationSchemaTest {
 
     @Test
     void freshV4HasRequiredKeysAndPreservesConstraintProbes() throws Exception {
-        ActualDatabase database = prepareActualDatabase();
+        ActualDatabase database = prepareActualDatabaseAt("4");
         try {
             seedActualPrerequisites(database.dataSource());
             assertActualAContract(database.dataSource());
@@ -84,7 +84,7 @@ class PartCMigrationSchemaTest {
     }
 
     @Test
-    void activeMigrationInventoryIsExactlyV1ThroughV4() throws IOException {
+    void activeMigrationInventoryIsExactlyV1ThroughV5() throws IOException {
         List<String> names = new ArrayList<>();
         collectMigrationNames(names, REPOSITORY.resolve("backend/src/main/resources/db/migration"));
         collectMigrationNames(names, REPOSITORY.resolve("backend/src/main/java/db/migration"));
@@ -94,7 +94,8 @@ class PartCMigrationSchemaTest {
                 "V1__baseline_existing_schema.sql",
                 "V2__part_b_auth_and_encrypt_database_credentials.java",
                 "V3__part_a_metrics_and_outbox.java",
-                "V4__part_c_monitoring.sql");
+                "V4__part_c_monitoring.sql",
+                "V5__notification_success_receipts.sql");
         assertThat(Files.exists(SCHEMA_ROOT.resolve("V4__part_c_monitoring.sql"))).isFalse();
     }
 
@@ -106,7 +107,8 @@ class PartCMigrationSchemaTest {
             long metricCount = countRows(database.dataSource(), "metric_data");
             long outboxCount = countRows(database.dataSource(), "event_outbox");
 
-            var migration = Flyway.configure().dataSource(database.dataSource()).load().migrate();
+            var migration = Flyway.configure().dataSource(database.dataSource())
+                    .target("4").load().migrate();
 
             assertThat(migration.migrationsExecuted).isEqualTo(1);
             assertThat(Flyway.configure().dataSource(database.dataSource()).load().info()
@@ -178,7 +180,7 @@ class PartCMigrationSchemaTest {
             assertThat(policies).hasSize(4).allMatch(expectedPolicy::equals);
             assertThat(countRows(database.dataSource(), "metric_data")).isEqualTo(metricCount);
             assertThat(countRows(database.dataSource(), "event_outbox")).isEqualTo(outboxCount);
-            assertThat(Flyway.configure().dataSource(database.dataSource()).load()
+            assertThat(Flyway.configure().dataSource(database.dataSource()).target("4").load()
                     .migrate().migrationsExecuted).isZero();
         } finally {
             dropActualDatabase(database);
@@ -294,7 +296,8 @@ class PartCMigrationSchemaTest {
                 }
                 return null;
             });
-            Flyway flyway = Flyway.configure().dataSource(database.dataSource()).load();
+            Flyway flyway = Flyway.configure().dataSource(database.dataSource())
+                    .target("4").load();
 
             Throwable failure = catchThrowable(flyway::migrate);
 

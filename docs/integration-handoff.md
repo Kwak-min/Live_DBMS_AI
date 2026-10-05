@@ -47,13 +47,15 @@
 
 ### C — 정책·위험도·사건·실시간·알림
 
-- [ ] RiskAssessmentEngine을 C 소유로 재사용하고 cg:risk 소비에 연결, 스냅샷/중복 기록/사건/outbox 원자 처리.
+이 목록은 통합 계획 체크리스트이며 완료 증거가 아니다. 현재 구현 및 검증 경계는 [C 위험도·알림 인계](part-c-risk-notifications.md)를 따른다.
+
+- [ ] V4의 네 규칙 상태 기반 엔진을 cg:risk 소비에 연결하고, 스냅샷/중복 기록/사건/outbox를 원자 처리.
 - [ ] 기본 정책 두 규칙+시스템 두 규칙, 지속/복구·partial/null·오래된 이벤트 처리·OPEN unique 제약.
 - [ ] LifecyclePort·stateVersion·삭제 tombstone·관리 종료 사유, 설정/정책 변경을 자동 복구와 구분.
 - [ ] 상태/정책/사건 조회·필터, incidents/monitoring_states/risk_rule_states 및 V4 migration.
 - [ ] Redis 그룹·pending reclaim·ACK·DLQ·24시간 안전 trim, 재시작/의존성 장애 복구.
 - [ ] simple broker/STOMP CONNECT·SUBSCRIBE 인증·토큰 만료·세션 종료·payload 변환.
-- [ ] Push/Slack CRUD, URL/endpoint 제한, 발송 작업 중복 방지·cooldown 병합·`eligibleAt`/`expiresAt` 영속화·재시작 후 만료 준수·재시도·수신처 해제, Delivery API.
+- [ ] Push/Slack CRUD, URL/endpoint 제한, 발송 작업 중복 방지·cooldown 병합·`expiresAt` 영속화·`eligibleAt`은 `expiresAt − 600초`로 계산·`next_attempt_at`에 다음 시도 시각 영속화·재시작 후 만료 준수·재시도·수신처 해제, Delivery API.
 
 ### 프론트 — 공통 로그인·관리·대시보드
 
@@ -126,3 +128,30 @@
 3. 변경한 계약의 실제 성공·빈 결과·실패 JSON과 Redis/STOMP 메시지를 보관한다. 명세 문장만으로 연동 성공을 판정하지 않는다.
 4. 단위·계약 테스트 후 T01~T28 중 담당 범위와 전체 로그인→등록→수집→구독→장애→알림→복구 시나리오를 실제 환경에서 실행한다.
 5. 미완료 기능은 완료로 표시하지 않는다. 코드 합치기/배포·외부 알림 실제 전송은 해당 실행 작업에서 수행한다. 이번 초안 작업은 저장소 업로드나 팀 메시지 전송을 포함하지 않는다.
+
+### Part C Web Push handoff (backend contract)
+
+After a user gesture, the frontend registers its service worker, requests the
+browser permission, obtains `PushSubscription`, and sends this JSON to
+`POST /api/v1/notifications/push-subscriptions`:
+
+```json
+{
+  "endpoint": "https://push.example.test/send/opaque-token",
+  "expirationTime": null,
+  "keys": {"p256dh": "<base64url>", "auth": "<base64url>"}
+}
+```
+
+`expirationTime` is a required member and may be `null`; a non-null value is
+future epoch milliseconds. The backend stores endpoint and keys encrypted and
+returns no secret material. Logout, session expiry/reuse, or role/status
+revocation synchronously tombstones the subscription. The worker rechecks the
+session immediately before send and marks a pending delivery `CANCELLED` when
+the check fails. Explicit `DELETE` synchronously cancels pending deliveries.
+
+The public Push payload navigates with `url: "/incidents/<UUID>"`; it does not
+use `path`. The frontend owns same-origin
+navigation after login, permission-denied UI, browser support, service-worker
+code, and real-device acceptance. This handoff does not claim provider/mobile
+delivery, deployment, or exactly-once behavior.

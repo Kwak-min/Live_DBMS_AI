@@ -1,7 +1,19 @@
-# C lifecycle contract handoff
+# C lifecycle contract handoff (historical PR15 snapshot)
 
-This handoff describes the active C lifecycle integration on the merged Actual A
-V3 baseline. `JdbcMonitoringLifecyclePort` is a required Spring component with
+This document records the merged PR15 V4/lifecycle handoff on the Actual A
+V3 baseline. Its lifecycle contract remains applicable. References below to
+"active", "current candidate", future `cg:risk` work, V1-V4 migration order,
+and verification receipts describe that PR15-era snapshot, not current
+risk/notification implementation or acceptance. The historical V4 content and
+209-test evidence are retained for traceability.
+
+For the successor V5, risk, stale, and notification implementation and its
+current verification boundary, see [C risk and notifications](part-c-risk-notifications.md).
+A keeps its four-column `database_configs` display writer and B keeps its
+current status reads even after activation and QA, until a separately
+team-coordinated switch.
+
+At the PR15 handoff, `JdbcMonitoringLifecyclePort` is a required Spring component with
 JDBC persistence and transactional outbox behavior, and B CRUD calls it inside
 the existing write transaction. Active V4 performs the retained-target
 backfill before the new binary accepts writes. This document does not claim a

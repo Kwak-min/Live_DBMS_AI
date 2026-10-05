@@ -70,8 +70,12 @@ app:
     retention-cleanup-cron: "0 0 3 * * *"
 
 monitoring:
+  risk:
+    enabled: ${RISK_ENABLED:false}
   realtime:
     enabled: ${REALTIME_ENABLED:false}
+  notifications:
+    enabled: ${NOTIFICATIONS_ENABLED:false}
 
 springdoc:
   api-docs:

@@ -14,6 +14,7 @@ import com.example.monitoring.common.api.FieldErrorResponse;
 import com.example.monitoring.common.api.ApiId;
 import com.example.monitoring.domain.AuditAction;
 import com.example.monitoring.domain.AuditTargetType;
+import com.example.monitoring.notification.session.PushSubscriptionLifecyclePort;
 import com.example.monitoring.service.AuditEventService;
 import com.example.monitoring.common.persistence.PartBTransactionLocks;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 
@@ -36,6 +39,8 @@ public class UserAccountService {
     private final PasswordHashingService passwordHashingService;
     private final AuditEventService auditEventService;
     private final PartBTransactionLocks transactionLocks;
+    private final PushSubscriptionLifecyclePort pushSubscriptions;
+    private final Clock clock;
 
     @Transactional
     public UserResponse signup(SignupRequest request) {
@@ -136,7 +141,9 @@ public class UserAccountService {
 
     private void revokeSessionsIfChanged(UserAccount user, boolean changed) {
         if (changed) {
-            authSessionRepository.revokeAllByUserId(user.getId(), Instant.now());
+            Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
+            authSessionRepository.revokeAllByUserId(user.getId(), now);
+            pushSubscriptions.deactivateByUser(user.getId(), now);
         }
     }
 

@@ -1,6 +1,6 @@
 # 저장·내부 인터페이스·운영 규격 초안 v0.2
 
-[전체 기준](integration-contract-draft.md) / [API](api.md) / [보안](integration-security.md) / [이벤트](events.md). 아래는 active V4 통합과 이후 운영 경계를 정의하는 계약이며 shared deployment 완료를 뜻하지 않는다.
+[전체 기준](integration-contract-draft.md) / [API](api.md) / [보안](integration-security.md) / [이벤트](events.md). 아래는 active V4 및 additive private V5 통합과 이후 운영 경계를 정의하는 계약이며 shared deployment 완료를 뜻하지 않는다.
 
 ## 1. 공통 환경
 
@@ -37,7 +37,9 @@ x는 해당 계열의 배포 시점 패치 버전이며 릴리스 산출물에�
 | TRUSTED_PROXY_CIDRS | 비어 있으면 전달 IP 헤더 전부 무시; 실제 proxy망 명시 | B |
 | WEB_PUSH_VAPID_PUBLIC_KEY / PRIVATE_KEY / SUBJECT | base64url P-256 공개/개인키, 운영 연락 mailto 주소 | C |
 | PUSH_ALLOWED_HOSTS | 보안 문서의 기본 host 집합 | C |
+| RISK_ENABLED | 기본 false; V4와 위험 평가 선행 조건이 준비된 환경에서만 true | C |
 | REALTIME_ENABLED | 기본 false; A `processed_events`가 준비된 환경에서만 true | C |
+| NOTIFICATIONS_ENABLED | 기본 false; 수신처·lease·provider fixture가 준비된 환경에서만 true | C |
 | APP_COLLECTOR_ENABLED / APP_COLLECTOR_FIXED_RATE_MS | true / 5000 | A |
 | APP_METRICS_RETENTION_DAYS | 30, 1~365 | A |
 | LEGACY_TIME_ZONE | 이전 LocalDateTime 자료 마이그레이션 시 원래 JVM timezone, 예 Asia/Seoul | A |
@@ -70,7 +72,7 @@ B의 쓰기 서비스는 C의 LifecyclePort를 호출하되 C가 참조하는 B 
 - C lifecycle은 생성 시 기본 정책과 stateVersion=1 상태를 만들고, 변경/중단/삭제 시 stateVersion을 증가시킨다. 변경된 configVersion의 lastAttemptAt/lastSuccessAt/latestMetricId를 null로 초기화하고 해당 사유로 OPEN 사건을 종료한다.
 - A는 수집 시작 시 configVersion을 캡처한다. 결과 저장 시 동일 대상 row를 잠그고 현재 configVersion·enabled·deletedAt을 다시 확인한다. 다르면 해당 완료 결과를 폐기하고 외부 이벤트도 발행하지 않는다. 동일하면 메트릭+outbox만 저장한다.
 - C는 MetricCollectedEvent 처리 시 다시 현재 설정 버전을 확인한다. 구 버전 이벤트는 처리 기록 후 ACK하되 최신 상태를 바꾸지 않는다. 최종 상태·사건·outbox는 자신의 트랜잭션으로 저장한다.
-- A가 B의 설정 전체 엔티티를 save하지 않는다. B의 기존 status reads와 A의 `database_configs` 네 칼럼 표시 writer는 metric-driven C state consumer가 live attempt/success/latest metric을 유지할 때까지 그대로 둔다. C lifecycle rows의 관리자 변경 상태만 이 통합에서 기록한다.
+- A가 B의 설정 전체 엔티티를 save하지 않는다. B의 기존 status reads와 A의 `database_configs` 네 칼럼 표시 writer는 C consumer 활성화와 native QA 통과 뒤에도 별도의 팀 간 소유권 전환 합의 전까지 그대로 둔다. 구현된 C consumer는 활성화 후 live attempt/success/latest metric과 위험 상태·사건을 기록하며, lifecycle은 관리자 설정 변경을 같은 트랜잭션에서 반영한다. 최종 native acceptance는 아직 완료되지 않았다.
 
 ## 3. 저장 모델·소유권
 
@@ -92,10 +94,10 @@ B의 쓰기 서비스는 C의 LifecyclePort를 호출하되 C가 참조하는 B 
 | audit_logs / access_logs | B | API의 이력 필드, index(occurred_at DESC,id DESC); 감사와 접속 조회 분리 |
 | push_subscriptions | C | id,user_id,sid,endpoint_hash,암호화 payload,expiration_time,enabled,deleted_at,timestamps; 활성 endpoint_hash만 partial unique |
 | notification_webhooks | C | id,name,provider=SLACK,암호화 URL,enabled,deleted_at,timestamps |
-| notification_deliveries | C | id,incident_id,incident_version,channel,recipient_id,status,attempt_count,eligible_at,expires_at,next_attempt_at,error,sent_at |
+| notification_deliveries | C | id,incident_id,incident_version,channel,recipient_id,status,attempt_count,expires_at,next_attempt_at,error,sent_at; `eligibleAt` is derived, not a V4 column |
 | blocked_reasons (legacy) | A 보존 | 기존 차단 이력 읽기 전용, v1 신규 쓰기 없음, 180일 보관 |
 
-incidents는 `(database_config_id,rule_id) WHERE status='OPEN'` partial unique index로 중복 사건을 막는다. notification_deliveries는 `(incident_id,incident_version,channel,recipient_id)` unique이며 `expires_at = eligible_at + interval '600 seconds'` 제약을 둔다. 처음 cooldown 대기열에 들어간 비-FATAL 상승 작업의 `eligible_at`·`expires_at`은 최초 값으로 고정하고, 더 최신 비-FATAL 상승은 같은 작업 내용만 갱신한다. FATAL 상승은 대기 중인 비-FATAL 작업을 취소/대체하고 즉시 작업을 만든다. `now < eligible_at`은 cooldown 대기, `eligible_at <= now < expires_at`은 외부 발송·재시도 창, `now >= expires_at`은 CANCELLED다. 즉시 작업은 생성 시각을 `eligible_at`으로 삼고 동일한 600초 창을 사용한다. 두 시각과 `next_attempt_at`은 재시작 뒤에도 저장값을 사용한다. resolved_at과 resolution_reason은 OPEN이면 둘 다 null, RESOLVED이면 둘 다 존재해야 한다.
+incidents는 `(database_config_id,rule_id) WHERE status='OPEN'` partial unique index로 중복 사건을 막는다. notification_deliveries는 `(incident_id,incident_version,channel,recipient_id)` unique다. V4의 물리 컬럼은 `expires_at`과 `next_attempt_at`이며, 논리적인 `eligibleAt`은 `expires_at - 600 seconds`로 계산한다. 최초 창의 `expires_at`은 고정하고 merge/retry는 `next_attempt_at`만 이동한다. `now < eligibleAt`은 cooldown 대기, `eligibleAt <= now < expires_at`은 외부 발송·재시도 창, `now >= expires_at`은 `CANCELLED`다. 즉시 작업도 동일한 600초 창을 쓴다. 재시작은 저장된 `expires_at`/`next_attempt_at`을 복원하며 창을 연장하지 않는다. resolved_at과 resolution_reason은 OPEN이면 둘 다 null, RESOLVED이면 둘 다 존재해야 한다.
 
 메트릭 보관 삭제가 사건을 지우지 않도록 incidents.source_metric_id는 nullable FK ON DELETE SET NULL이다. 사건의 metricName/value/threshold는 스냅샷으로 보존한다. 대상은 물리 삭제하지 않으므로 과거 사건/이력의 FK가 끊어지지 않는다. Push/Webhook 삭제는 disabled+deleted_at tombstone으로 남겨 재시도·결과 조회의 수신처 ID를 보존한다.
 
@@ -129,7 +131,31 @@ outbox publisher는 1초 주기, 최대 100건, 대상별 생성 순서대로 �
 
 모든 수집 작업은 전체 15초 제한 내에 JDBC statement 취소·connection close로 종료한다. 실행 중인 대상의 다음 tick은 건너뛰며 동시에 두 수집을 하지 않는다. 실패 스냅샷도 가능한 한 PostgreSQL에 저장한다. PostgreSQL이 안 되면 미저장 관측을 Redis에만 먼저 발행하지 않고 운영 오류와 생존 신호를 남긴다.
 
-프로세스 시작 순서: 기존 application writer 중지·drain 및 새 binary 준비 전까지 write fence → PostgreSQL/Redis 준비 → V4 Flyway 적용(`database_configs` lock은 migration commit까지 유지) → 필요하면 최초 Admin bootstrap → 새 backend binary → frontend/proxy → writer 재개. DB lock은 migration commit에서 끝나며, old-writer fence는 새 binary가 준비될 때까지 유지한다. 재시작 시 C는 저장된 상태/OPEN 사건을 읽고 지속 시간 후보를 초기화하며, 향후 notification worker가 사용할 `eligible_at`·`expires_at`·`next_attempt_at`을 복원해 cooldown 대기와 active send/retry 창을 구분한다. delayed worker의 만료/재시작 규칙은 future notification worker가 구현할 운영 계약이다. 기존 사건을 INFO로 강제 복구하지 않는다. Redis 지연/누락 중 실시간 전송은 제한되지만 저장된 REST 이력은 조회 가능하다. 이 문서는 handoff만 기록하며 shared deployment 완료를 주장하지 않는다.
+프로세스 시작 순서: 기존 application writer 중지·drain 및 새 binary 준비
+전까지 write fence → PostgreSQL/Redis 준비 → 현재 보류된 Flyway migration 적용
+(기존 V4의 `database_configs` lock은 migration commit까지 유지하고, V5
+success receipt를 포함한 후속 migration도 같은 writer fence 아래 적용) → 필요하면 최초 Admin
+bootstrap → 새 backend binary → frontend/proxy → writer 재개한다. DB lock은
+migration commit에서 끝나며 old-writer fence는 새 binary가 준비될 때까지
+유지한다.
+
+재시작 시 C는 저장된 상태와 OPEN 사건을 읽고 지속 시간 후보를 초기화한다.
+Active V4의 물리 값은 `expires_at`과 `next_attempt_at`이며 논리적인
+`eligibleAt`은 `expiresAt - 600 seconds`로 계산한다. Worker는 저장된 값을
+복원하고 창을 연장하지 않는다. `now >= expiresAt`인 send/retry 시도는
+`CANCELLED`가 된다. Notification worker는 프로세스 수명 PostgreSQL session
+advisory lease와 JVM non-overlap을 사용하고, lease를 잃으면 새 외부 시도를
+중지한다.
+
+30일 후 notification delivery log가 purge되어도 OPEN 사건의 성공적인
+opening/increase 증거는 private `notification_success_receipts`에 남긴다.
+Receipt는 `SENT`인 `INCIDENT_OPENED`/`SEVERITY_INCREASED`의 최대 시각을
+보존하고 REST/STOMP/public DTO에는 노출하지 않는다. Target environment에서
+V5 migration과 새 binary를 활성화할 때 writer drain/fence와 backfill lock을
+적용하며, 이는 rollout prerequisite이다. 기존 사건을 INFO로 강제 복구하지
+않는다. Redis 지연/누락 중 실시간 전송은 제한되지만 저장된 REST 이력은
+조회 가능하다. 이 문서는 handoff만 기록하며 shared deployment 완료를
+주장하지 않는다.
 
 최초 v1 전환은 기존 consumer/수집기를 중지하고 PostgreSQL·Redis를 백업한다. 기존 무버전 Stream을 `archive:v0:<UTC기준시각>:<원래키>`로 rename하여 7일 보존하고 같은 기존 이름으로 v1 Stream을 새로 만든다. 보관 복사와 건수 확인 전에는 삭제하지 않는다. 구버전 이벤트를 v1 consumer에 투입하지 않는다. 시간·지표 의미가 달라 자동 무손실 변환을 가정하지 않는다.
 
@@ -139,4 +165,29 @@ outbox publisher는 1초 주기, 최대 100건, 대상별 생성 순서대로 �
 - 경보: outbox oldest >30초, consumer lag >30초, pending oldest >60초, DLQ >0, collector cycle >15초, DB pool 고갈, 알림 실패율. 이 값은 운영 관측이며 대상 DB 위험도와 섞지 않는다.
 - readiness는 PostgreSQL 필수 연결/Flyway 정상 여부로 판단한다. Redis 장애는 상태를 DEGRADED로 기록하고 REST 읽기를 유지하며 로그인/CSRF 의존 기능은 503. liveness는 외부 DB/Redis 장애만으로 실패시키지 않는다.
 - 배포 패키지에는 실제 JDK/이미지 버전·digest, migration 버전, secret 변수 이름 목록, OpenAPI export, 샘플 Redis/STOMP 프레임, 통합 검수 결과를 포함한다.
-- 소스 변경 없는 이번 문서 작업에서는 DB/Redis 실행·배포·기능 테스트를 수행한 것으로 처리하지 않는다.
+- 최종 후보 SHA를 고정한 뒤 sole runtime-lease owner가 `PART_C_RUNTIME_LEASE=granted`를 설정하고, caller가 제공한 JDK/Gradle/PostgreSQL/Redis/native client tool root를 `-ToolRoot` 또는 `PART_C_TOOL_ROOT`로 전달해 다음 명령을 실행한다. 개인 개발자 경로를 문서에 고정하지 않는다. Runner에는 `-Execute` switch가 없다.
+
+```powershell
+$expectedHead = (git rev-parse HEAD)
+$toolRoot = $env:PART_C_TOOL_ROOT
+$env:PART_C_RUNTIME_LEASE = 'granted'
+powershell -ExecutionPolicy Bypass -File backend/scripts/qa/run-part-c-qa.ps1 `
+  -ExpectedHead $expectedHead `
+  -EvidenceDir '<attemptDir>/task-20-native-qa' `
+  -ToolRoot $toolRoot
+
+powershell -ExecutionPolicy Bypass -File backend/scripts/qa/run-part-c-qa.ps1 `
+  -ExpectedHead $expectedHead `
+  -EvidenceDir '<attemptDir>/task-20-native-qa' `
+  -ToolRoot $toolRoot `
+  -VerifyCleanupOnly
+```
+
+이 명령은 실제 local PostgreSQL/Redis/application HTTP/STOMP와 loopback TLS
+Push/Slack fixture를 사용한다. MariaDB-to-A collector roundtrip은 검수하지
+않으며, 공용 provider 또는 실제 모바일 전달은 검수하지 않는다.
+
+이 문서 자체는 DB/Redis 실행·배포·기능 검수 결과를 대신하지 않는다. 실제
+실행 검수 결과는 exact-SHA QA ledger/evidence manifest에 기록한다. 저장된
+exact-SHA artifact가 없는 경우 문서의 명령 예시만으로 검수 통과를 판정하지
+않는다.
