@@ -323,7 +323,7 @@ function Save-FreshJUnit(
             -and $Report.LastWriteTimeUtc -le $Ended.AddSeconds(2)
         Assert-True $Fresh "Stale JUnit XML in ${Phase}: $($Report.Name)"
         Copy-Item -Force -LiteralPath $Report.FullName -Destination (Join-Path $Destination $Report.Name)
-        [xml]$Xml = Get-Content -Raw -LiteralPath $Report.FullName
+        [xml]$Xml = Get-Content -Raw -Encoding UTF8 -LiteralPath $Report.FullName
         $Tests += [int]$Xml.testsuite.tests
         $Failures += [int]$Xml.testsuite.failures
         $Errors += [int]$Xml.testsuite.errors
@@ -536,7 +536,7 @@ function Start-Postgres {
     ) (Join-Path $Evidence 'postgres-initdb.out.log') (Join-Path $Evidence 'postgres-initdb.err.log') 120
     $Start = Invoke-BoundedProcess 'postgres-start' (Join-Path $PgBin 'pg_ctl.exe') @(
         '-D', $Data, '-l', (Join-Path $Evidence 'postgres.log'), '-w', '-t', '30',
-        '-o', "-h 127.0.0.1 -p $($Ports.PostgreSql)", 'start'
+        '-o', "`"-h 127.0.0.1 -p $($Ports.PostgreSql)`"", 'start'
     ) (Join-Path $Evidence 'postgres-start.out.log') (Join-Path $Evidence 'postgres-start.err.log') 45
     $script:PgStarted = $true
     Assert-True (Wait-Port $Ports.PostgreSql $true 30) 'PostgreSQL did not open its reserved port'
@@ -684,11 +684,13 @@ function Invoke-Bootstrap([string]$Label, [string]$Jar, [bool]$ShouldSucceed) {
 function Invoke-Psql([string]$Database, [string]$Sql, [string]$Name) {
     $Out = Join-Path $Evidence "$Name.out.txt"
     $Err = Join-Path $Evidence "$Name.err.txt"
+    $SqlPath = Join-Path $Runtime "$Name.sql"
+    Write-Utf8NoBom $SqlPath $Sql
     $Result = Invoke-BoundedProcess $Name (Join-Path $PgBin 'psql.exe') @(
         '-h', '127.0.0.1', '-p', [string]$Ports.PostgreSql, '-U', $PgUser,
-        '-d', $Database, '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', $Sql
+        '-d', $Database, '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-f', ('"' + $SqlPath + '"')
     ) $Out $Err 30
-    return [ordered]@{ result = $Result; value = (Get-Content -Raw -LiteralPath $Out).Trim() }
+    return [ordered]@{ result = $Result; value = (Get-Content -Raw -Encoding UTF8 -LiteralPath $Out).Trim() }
 }
 
 function Invoke-BootstrapScenario([string]$Jar) {
@@ -772,7 +774,7 @@ function Assert-NativeArtifacts {
         $Path = Join-Path $Evidence $Entry.Key
         Assert-True (Test-Path -LiteralPath $Path -PathType Leaf) "Native artifact is missing: $($Entry.Key)"
         Assert-True ((Get-Item -LiteralPath $Path).Length -gt 2) "Native artifact is empty: $($Entry.Key)"
-        $Json = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+        $Json = Get-Content -Raw -Encoding UTF8 -LiteralPath $Path | ConvertFrom-Json
         foreach ($Field in $Entry.Value) {
             Assert-True ($Json.$Field -eq $true) "Native artifact $($Entry.Key) did not prove $Field"
         }
@@ -781,7 +783,7 @@ function Assert-NativeArtifacts {
             sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
         }
     }
-    $Timing = Get-Content -Raw -LiteralPath (Join-Path $Evidence 'timing-restart-replay.json') |
+    $Timing = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $Evidence 'timing-restart-replay.json') |
         ConvertFrom-Json
     Assert-True ([long]$Timing.stalePollConfiguredMs -eq 1000L) `
         'Native stale proof did not use the production one-second scan interval'
@@ -789,7 +791,7 @@ function Assert-NativeArtifacts {
         [long]$Timing.stalePollObservedLagMs -ge 0L -and
         [long]$Timing.stalePollObservedLagMs -lt [long]$Timing.stalePollConfiguredMs
     ) 'Native stale proof did not observe a nonnegative lag below the configured interval'
-    $Risk = Get-Content -Raw -LiteralPath (Join-Path $Evidence 'risk-realtime.json') |
+    $Risk = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $Evidence 'risk-realtime.json') |
         ConvertFrom-Json
     Assert-True ($Risk.actualMariaDbCollector -eq $false) `
         'Native risk evidence must not claim an unexecuted MariaDB collector producer roundtrip'
@@ -827,16 +829,26 @@ function Scrub-Evidence {
     $FilesScanned = 0
     $FilesRedacted = 0
     $Remaining = 0
-    $TextExtensions = @('.txt', '.log', '.json', '.xml', '.sha256', '.out', '.err')
+    $TextExtensions = @('.txt', '.log', '.json', '.xml', '.sha256', '.out', '.err', '.sql')
     $Assignment = '(?im)((?:password|secret|token|authorization|cookie|private[_-]?key|p256dh|auth|ciphertext|endpoint|webhook[_-]?url|crypto-key|encryption)\s*[:=]\s*)("[^"\r\n]*"|''[^''\r\n]*''|[^\s,;]+)'
     foreach ($File in @(Get-ChildItem -LiteralPath $Evidence -File -Recurse)) {
         if ($File.Extension.ToLowerInvariant() -notin $TextExtensions) {
             continue
         }
         $FilesScanned++
-        $Text = Get-Content -Raw -LiteralPath $File.FullName -ErrorAction SilentlyContinue
-        if ($null -eq $Text) {
-            continue
+        $Reader = [IO.StreamReader]::new($File.FullName, [Text.UTF8Encoding]::new($false, $true), $true)
+        try {
+            try {
+                $Text = $Reader.ReadToEnd()
+                $Encoding = $Reader.CurrentEncoding
+            }
+            catch [Text.DecoderFallbackException] {
+                $Encoding = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.ANSICodePage)
+                $Text = [IO.File]::ReadAllText($File.FullName, $Encoding)
+            }
+        }
+        finally {
+            $Reader.Dispose()
         }
         $Updated = $Text.Replace($SecretSentinel, '[REDACTED_SENTINEL]')
         foreach ($Secret in @($PgPassword, $JwtKey, $DatabaseKey, $BootstrapPassword, $QaUserPassword)) {
@@ -849,7 +861,7 @@ function Scrub-Evidence {
         $Updated = $Updated.Replace('127.0.0.1', '[REDACTED_ADDRESS]')
         $Updated = [regex]::Replace($Updated, $Assignment, '$1"[REDACTED]"')
         if ($Updated -ne $Text) {
-            [IO.File]::WriteAllText($File.FullName, $Updated, [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($File.FullName, $Updated, $Encoding)
             $FilesRedacted++
         }
         $KnownSecretRemains = @($PgPassword, $JwtKey, $DatabaseKey, $BootstrapPassword, $QaUserPassword) |
@@ -935,7 +947,7 @@ function Invoke-CleanupVerification {
     Assert-FrozenSource | Out-Null
     Assert-True (Test-Path -LiteralPath $ManifestPath -PathType Leaf) `
         'Cleanup verification requires the completed run manifest in EvidenceDir'
-    $Prior = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json
+    $Prior = Get-Content -Raw -Encoding UTF8 -LiteralPath $ManifestPath | ConvertFrom-Json
     $PortChecks = [ordered]@{}
     $AllPortsClosed = $true
     foreach ($Entry in $Ports.GetEnumerator()) {
@@ -1003,7 +1015,7 @@ Write-Utf8NoBom $JournalPath $JournalHeader
 
 $Postgres = $null
 try {
-    foreach ($Required in @($Java, $Gradle, (Join-Path $PgBin 'initdb.exe'), (Join-Path $PgBin 'pg_ctl.exe'), $Wsl)) {
+    foreach ($Required in @($Java, $Gradle, (Join-Path $PgBin 'initdb.exe'), (Join-Path $PgBin 'pg_ctl.exe'), (Join-Path $PgBin 'psql.exe'), (Join-Path $PgBin 'createdb.exe'), $Wsl)) {
         Assert-True (Test-Path -LiteralPath $Required -PathType Leaf) "Required tool is missing: $Required"
     }
     New-Item -ItemType Directory -Force -Path $GradleUserHome | Out-Null
