@@ -32,7 +32,7 @@ live-state boundary and runtime handoff.
 | Monitored targets | B | `database_configs(id)`; targets are soft-deleted and their IDs are not reused |
 | Metrics | A | `metric_data(id,database_config_id)`; V4 adds the named target-scoped composite key before C foreign keys |
 | Reliable events | A common | Actual A V3 owns `event_outbox` and `processed_events`; C uses the common interfaces and does not duplicate them. Migration initialization emits no lifecycle events. |
-| Status, risk, incidents, recipients, deliveries | C | The seven tables in active V4; risk evaluation and external delivery remain future consumers/workers |
+| Status, risk, incidents, recipients, deliveries | C | The seven tables in active V4 plus the backend risk, incident, realtime, and notification consumers |
 | Recipient encryption service and key ring | B security boundary | C persists only key version, 12-byte nonce, and ciphertext-with-tag returned by the shared encryption boundary |
 
 The SQL under `backend/schema/part-c/probes` is inspection-only. Production V4
@@ -102,8 +102,8 @@ only after Actual A V3's `processed_events` table exists; the consumer fails clo
 when that table is unavailable rather than creating a C-owned substitute.
 
 The schema deliberately leaves event publication and consumption deduplication in
-A's `event_outbox` and `processed_events`. State/incident/delivery changes will join
-those common tables transactionally when the later services are implemented.
+A's `event_outbox` and `processed_events`. Current state, incident, and delivery
+changes join those common tables transactionally through the C services.
 
 ## Stage 3 auth and publish handoff
 
@@ -171,3 +171,38 @@ probe verifies the real common outbox shape, active V4 tables, and cross-target
 metric references. Those receipts are historical probe evidence; the active
 integration uses the real V1/V2/V3 tables, active V4, strict retained-row
 validation, and no historical metric or outbox seeding.
+
+### Notification timing and session ownership
+
+Active V4 stores `notification_deliveries.expires_at` and
+`next_attempt_at`. The immutable logical eligibility instant is derived as
+`eligibleAt = expiresAt - 600 seconds`; do not describe `eligible_at` as a
+physical V4 column unless a later migration explicitly adds it. Merges,
+restarts, and retry backoff may move only `next_attempt_at`. At or after
+`expiresAt`, the worker records `CANCELLED`.
+
+Push rows are session-bound through `(sid,user_id)` and are tombstoned before
+logout/revocation/retention clears the session. Push DELETE also cancels pending
+deliveries synchronously. The worker performs the final session and recipient
+check immediately before an external attempt. Delivery lease ownership is one
+process-lifetime PostgreSQL session advisory lease with JVM non-overlap; no
+business row lock is held across HTTP.
+
+The existing A `database_configs` display writer and B status reads remain the
+owners until the metric-driven C state consumer is activated. V1-V4 remain
+immutable. The backend uses one additive private V5
+`notification_success_receipts` compact success receipt; it does not add a
+physical `eligible_at` column or another schema change. The receipt is internal
+and does not claim a frontend or provider acceptance implementation.
+
+### Durable success receipt
+
+Delivery rows may still be purged after 30 days, so recovery proof for an OPEN
+incident is stored in the private receipt. Backfill only `SENT`
+`INCIDENT_OPENED`/`SEVERITY_INCREASED` rows and keeps the maximum timestamp per
+incident/channel/recipient. Existing OPEN and RESOLVED incidents, including
+inactive or tombstoned recipients, are eligible; recovery and non-SENT rows are
+not. History already purged cannot be reconstructed. A resolved incident's
+180-day cascade removes its receipt. Target-environment activation of the
+migration and new binary requires writer drain/fence and the backfill lock; this
+is a rollout prerequisite rather than a pre-publication action.

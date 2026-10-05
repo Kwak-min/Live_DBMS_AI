@@ -1,0 +1,470 @@
+{
+  "description": "Part C backend contract fixtures. These examples are deterministic codec inputs, not captured production responses.",
+  "contractVersion": "0.3",
+  "status": "authoritative",
+  "authoritative": true,
+  "fixtures": {
+    "metricCollectedEvent": {
+      "schemaVersion": 1,
+      "eventId": "b43a63cb-5f28-4f4a-8de1-412c352ba79d",
+      "eventType": "MetricCollectedEvent",
+      "publishedAt": "2026-09-28T03:00:00.050Z",
+      "metricId": 501,
+      "databaseConfigId": 12,
+      "configVersion": 2,
+      "databaseName": "production-mariadb",
+      "timestamp": "2026-09-28T03:00:00.000Z",
+      "collectionAttemptTime": "2026-09-28T03:00:00.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:00.000Z",
+      "cpuUsage": null,
+      "memoryUsage": null,
+      "activeConnections": 18,
+      "maxConnections": 151,
+      "qps": 24.2,
+      "slowQueries": 310,
+      "slowQueriesDelta": 2,
+      "slowQueriesPerSecond": 0.4,
+      "metricWindowSeconds": 5,
+      "threadsRunning": 3,
+      "storageBytes": 104857600,
+      "responseTimeMs": 12,
+      "collectionStatus": "SUCCESS",
+      "errorCode": null,
+      "errorMessage": null,
+      "unavailableMetrics": {
+        "cpuUsage": "UNSUPPORTED",
+        "memoryUsage": "UNSUPPORTED"
+      }
+    },
+    "monitoringStatusChangedEvent": {
+      "schemaVersion": 1,
+      "eventId": "20412297-1a93-44bc-9944-a8d8a03765aa",
+      "eventType": "MonitoringStatusChangedEvent",
+      "databaseConfigId": 12,
+      "publishedAt": "2026-09-28T03:00:00.100Z",
+      "configVersion": 2,
+      "deleted": false,
+      "enabled": true,
+      "connectionStatus": "UP",
+      "dataFreshness": "FRESH",
+      "riskLevel": "INFO",
+      "lastAttemptAt": "2026-09-28T03:00:00.000Z",
+      "lastSuccessAt": "2026-09-28T03:00:00.000Z",
+      "latestMetricId": 501,
+      "openIncidentIds": [],
+      "stateVersion": 8,
+      "updatedAt": "2026-09-28T03:00:00.080Z"
+    },
+    "incidentCreatedEvent": {
+      "schemaVersion": 1,
+      "eventId": "3bf532f0-028c-4eb9-bc5e-99e35fa3f218",
+      "eventType": "IncidentCreatedEvent",
+      "publishedAt": "2026-09-28T03:10:15.050Z",
+      "timestamp": "2026-09-28T03:10:15.000Z",
+      "sourceEventId": "a4954a1b-5f71-4358-a7d3-84829cb7fa50",
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "databaseConfigId": 12,
+      "databaseName": "production-mariadb",
+      "ruleId": "CONNECTION_RATIO",
+      "ruleType": "CONNECTION_RATIO_EXCEEDED",
+      "severity": "WARNING",
+      "status": "OPEN",
+      "openedAt": "2026-09-28T03:10:15.000Z",
+      "lastObservedAt": "2026-09-28T03:10:15.000Z",
+      "resolvedAt": null,
+      "resolutionReason": null,
+      "metricName": "activeConnectionsRatio",
+      "metricValue": 0.82,
+      "thresholdValue": 0.8,
+      "sourceMetricId": 650,
+      "message": "Connection ratio exceeded the warning threshold.",
+      "incidentVersion": 1
+    },
+    "incidentUpdatedIncreasedEvent": {
+      "schemaVersion": 1,
+      "eventId": "d4d9bc4d-ff3d-4050-9497-8f995ca8d631",
+      "eventType": "IncidentUpdatedEvent",
+      "publishedAt": "2026-09-28T03:10:30.050Z",
+      "timestamp": "2026-09-28T03:10:30.000Z",
+      "sourceEventId": "ac50c5cb-7c86-4d98-95a7-6db2d37e5001",
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "databaseConfigId": 12,
+      "databaseName": "production-mariadb",
+      "ruleId": "CONNECTION_RATIO",
+      "ruleType": "CONNECTION_RATIO_EXCEEDED",
+      "severity": "CRITICAL",
+      "status": "OPEN",
+      "openedAt": "2026-09-28T03:10:15.000Z",
+      "lastObservedAt": "2026-09-28T03:10:30.000Z",
+      "resolvedAt": null,
+      "resolutionReason": null,
+      "metricName": "activeConnectionsRatio",
+      "metricValue": 0.91,
+      "thresholdValue": 0.9,
+      "sourceMetricId": 651,
+      "message": "Connection ratio exceeded the critical threshold.",
+      "incidentVersion": 2,
+      "severityTransition": "INCREASED"
+    },
+    "incidentUpdatedDecreasedEvent": {
+      "schemaVersion": 1,
+      "eventId": "f18b20d2-94ae-49dd-9f1a-a0a3bb4f3c51",
+      "eventType": "IncidentUpdatedEvent",
+      "publishedAt": "2026-09-28T03:10:45.050Z",
+      "timestamp": "2026-09-28T03:10:45.000Z",
+      "sourceEventId": "6d6a9a5a-53d0-44b5-a57e-745364f53eb5",
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "databaseConfigId": 12,
+      "databaseName": "production-mariadb",
+      "ruleId": "CONNECTION_RATIO",
+      "ruleType": "CONNECTION_RATIO_EXCEEDED",
+      "severity": "WARNING",
+      "status": "OPEN",
+      "openedAt": "2026-09-28T03:10:15.000Z",
+      "lastObservedAt": "2026-09-28T03:10:45.000Z",
+      "resolvedAt": null,
+      "resolutionReason": null,
+      "metricName": "activeConnectionsRatio",
+      "metricValue": 0.82,
+      "thresholdValue": 0.8,
+      "sourceMetricId": 652,
+      "message": "Connection ratio returned to warning severity.",
+      "incidentVersion": 3,
+      "severityTransition": "DECREASED"
+    },
+    "incidentResolvedEvent": {
+      "schemaVersion": 1,
+      "eventId": "8297b1b7-b0bb-47e3-a931-a0226dfdfe65",
+      "eventType": "IncidentResolvedEvent",
+      "publishedAt": "2026-09-28T03:11:15.050Z",
+      "timestamp": "2026-09-28T03:11:15.000Z",
+      "sourceEventId": "cab5465b-125b-4d9d-a848-40c7f6c6d9c8",
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "databaseConfigId": 12,
+      "databaseName": "production-mariadb",
+      "ruleId": "CONNECTION_RATIO",
+      "ruleType": "CONNECTION_RATIO_EXCEEDED",
+      "severity": "WARNING",
+      "status": "RESOLVED",
+      "openedAt": "2026-09-28T03:10:15.000Z",
+      "lastObservedAt": "2026-09-28T03:11:15.000Z",
+      "resolvedAt": "2026-09-28T03:11:15.000Z",
+      "resolutionReason": "RECOVERED",
+      "metricName": "activeConnectionsRatio",
+      "metricValue": 0.7,
+      "thresholdValue": 0.8,
+      "sourceMetricId": 662,
+      "message": "Connection ratio remained below the warning threshold.",
+      "incidentVersion": 4
+    },
+    "stompIncidentUpdated": {
+      "schemaVersion": 1,
+      "eventId": "f18b20d2-94ae-49dd-9f1a-a0a3bb4f3c51",
+      "eventType": "IncidentUpdatedEvent",
+      "databaseConfigId": 12,
+      "publishedAt": "2026-09-28T03:10:45.050Z",
+      "data": {
+        "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+        "databaseConfigId": 12,
+        "databaseName": "production-mariadb",
+        "ruleId": "CONNECTION_RATIO",
+        "ruleType": "CONNECTION_RATIO_EXCEEDED",
+        "severity": "WARNING",
+        "status": "OPEN",
+        "openedAt": "2026-09-28T03:10:15.000Z",
+        "lastObservedAt": "2026-09-28T03:10:45.000Z",
+        "resolvedAt": null,
+        "resolutionReason": null,
+        "metricName": "activeConnectionsRatio",
+        "metricValue": 0.82,
+        "thresholdValue": 0.8,
+        "sourceMetricId": 652,
+        "message": "Connection ratio returned to warning severity.",
+        "incidentVersion": 3
+      }
+    },
+    "stompStatusChanged": {
+      "schemaVersion": 1,
+      "eventId": "20412297-1a93-44bc-9944-a8d8a03765aa",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 12,
+      "publishedAt": "2026-09-28T03:00:00.100Z",
+      "data": {
+        "databaseConfigId": 12,
+        "configVersion": 2,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-09-28T03:00:00.000Z",
+        "lastSuccessAt": "2026-09-28T03:00:00.000Z",
+        "latestMetricId": 501,
+        "openIncidentIds": [],
+        "stateVersion": 8,
+        "updatedAt": "2026-09-28T03:00:00.080Z"
+      }
+    },
+    "webPushPayload": {
+      "schemaVersion": 1,
+      "deliveryId": 81,
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "type": "INCIDENT_OPENED",
+      "title": "[WARNING] production-mariadb",
+      "body": "Connection ratio exceeded the warning threshold.",
+      "url": "/incidents/984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "tag": "incident:984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "sentAt": "2026-09-28T03:00:15.000Z"
+    },
+    "deliveryResponse": {
+      "id": 81,
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "incidentVersion": 2,
+      "channel": "WEB_PUSH",
+      "recipientId": 81,
+      "status": "PENDING",
+      "attemptCount": 0,
+      "lastErrorCode": null,
+      "createdAt": "2026-09-28T03:00:00.000Z",
+      "sentAt": null
+    },
+    "deliverySchedule": {
+      "id": 81,
+      "incidentId": "984b0ae3-37e9-46b1-a709-87bfb95b9a1a",
+      "incidentVersion": 2,
+      "channel": "WEB_PUSH",
+      "recipientId": 81,
+      "status": "PENDING",
+      "attemptCount": 0,
+      "eligibleAt": "2026-09-28T04:00:00.000Z",
+      "expiresAt": "2026-09-28T04:10:00.000Z",
+      "nextAttemptAt": "2026-09-28T04:00:00.000Z",
+      "createdAt": "2026-09-28T04:00:00.000Z",
+      "lastErrorCode": null,
+      "sentAt": null
+    },
+    "validationError": {
+      "code": "VALIDATION_ERROR",
+      "message": "Request values are invalid.",
+      "requestId": "f416c138-5cdf-451c-8b31-ae9d59eaaeba",
+      "fieldErrors": [
+        {
+          "field": "endpoint",
+          "code": "INVALID_VALUE",
+          "message": "Endpoint is not allowed."
+        }
+      ]
+    },
+    "pushSubscriptionInput": {
+      "endpoint": "https://push.example.test/send/opaque-token",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "<base64url-public-key>",
+        "auth": "<base64url-auth-secret>"
+      }
+    }
+  },
+  "codecChecks": [
+    {
+      "fixture": "metricCollectedEvent",
+      "codec": "MetricPayloadParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "monitoringStatusChangedEvent",
+      "codec": "StatusStreamEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentCreatedEvent",
+      "codec": "IncidentStreamEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentUpdatedIncreasedEvent",
+      "codec": "IncidentStreamEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentUpdatedDecreasedEvent",
+      "codec": "IncidentStreamEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentResolvedEvent",
+      "codec": "IncidentStreamEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentCreatedEvent",
+      "codec": "NotificationIncidentEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentUpdatedIncreasedEvent",
+      "codec": "NotificationIncidentEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentUpdatedDecreasedEvent",
+      "codec": "NotificationIncidentEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "incidentResolvedEvent",
+      "codec": "NotificationIncidentEventParser",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "stompIncidentUpdated",
+      "codec": "RealtimeIncidentMessage",
+      "visibility": "public"
+    },
+    {
+      "fixture": "stompStatusChanged",
+      "codec": "RealtimeStatusMessage",
+      "visibility": "public"
+    },
+    {
+      "fixture": "webPushPayload",
+      "codec": "WebPushPayload",
+      "visibility": "public"
+    },
+    {
+      "fixture": "deliveryResponse",
+      "codec": "DeliveryResponse",
+      "visibility": "public"
+    },
+    {
+      "fixture": "deliverySchedule",
+      "codec": "DeliverySchedule",
+      "visibility": "internal"
+    },
+    {
+      "fixture": "validationError",
+      "codec": "ErrorResponse",
+      "visibility": "public"
+    },
+    {
+      "fixture": "pushSubscriptionInput",
+      "codec": "PushSubscriptionRequest",
+      "visibility": "public-request"
+    }
+  ],
+  "publicFixtures": [
+    "stompIncidentUpdated",
+    "stompStatusChanged",
+    "webPushPayload",
+    "deliveryResponse",
+    "validationError",
+    "pushSubscriptionInput"
+  ],
+  "internalOnlyFields": [
+    "severityTransition",
+    "eligibleAt",
+    "expiresAt",
+    "nextAttemptAt",
+    "webhookUrl",
+    "pushSubscriptionId",
+    "notificationWebhookId",
+    "payloadKeyVersion",
+    "payloadNonce",
+    "payloadCiphertext",
+    "vapidPrivateKey"
+  ],
+  "invariants": [
+    {
+      "name": "deliveryWindow",
+      "fixture": "deliverySchedule",
+      "start": "eligibleAt",
+      "end": "expiresAt",
+      "seconds": 600,
+      "status": "requires environment runtime evidence"
+    },
+    {
+      "name": "severityTransitionScope",
+      "updatedFixtures": [
+        "incidentUpdatedIncreasedEvent",
+        "incidentUpdatedDecreasedEvent"
+      ],
+      "allowedValues": [
+        "INCREASED",
+        "DECREASED"
+      ],
+      "status": "canonical internal event rule"
+    },
+    {
+      "name": "requiredNullableExpirationTime",
+      "fixture": "pushSubscriptionInput",
+      "required": true,
+      "nullable": true,
+      "status": "canonical request contract"
+    },
+    {
+      "name": "publicWebPushNavigationField",
+      "fixture": "webPushPayload",
+      "requiredField": "url",
+      "forbiddenField": "path",
+      "status": "canonical public payload contract"
+    },
+    {
+      "name": "migrationBoundary",
+      "immutableMigrations": [
+        "V1",
+        "V2",
+        "V3",
+        "V4"
+      ],
+      "onlyAuthorizedSchemaDelta": "V5 private notification_success_receipts compact success receipt",
+      "publicFixtureExposure": false,
+      "forbiddenAdditionalEligibilityColumn": true,
+      "status": "backend schema boundary; environment migration activation required"
+    }
+  ],
+  "privateReceiptFields": [
+    "incident_id",
+    "channel",
+    "push_subscription_id",
+    "notification_webhook_id",
+    "recipient_id",
+    "last_successful_open_or_increase_at"
+  ],
+  "privateReceiptContract": {
+    "migration": "V5",
+    "table": "notification_success_receipts",
+    "publicDto": false,
+    "publicEvent": false,
+    "backfillStatusTypes": [
+      "SENT"
+    ],
+    "backfillNotificationTypes": [
+      "INCIDENT_OPENED",
+      "SEVERITY_INCREASED"
+    ],
+    "timestampAggregation": "MAX(sent_at)",
+    "recoveryWindowSeconds": 600,
+    "retention": {
+      "deliveryLogDays": 30,
+      "openIncident": "retained",
+      "resolvedIncidentDays": 180,
+      "receiptDelete": "incident cascade"
+    },
+    "implementationStatus": "backend contract defined; environment migration activation required"
+  },
+  "migrationBoundary": {
+    "immutableMigrations": [
+      "V1",
+      "V2",
+      "V3",
+      "V4"
+    ],
+    "authorizedSchemaDelta": {
+      "migration": "V5",
+      "table": "notification_success_receipts",
+      "private": true,
+      "compact": true
+    },
+    "additionalEligibilityColumn": false,
+    "publicFixtureExposure": false
+  }
+}

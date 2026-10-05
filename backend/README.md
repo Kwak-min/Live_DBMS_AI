@@ -21,7 +21,7 @@ Flyway owns schema creation and Hibernate uses `ddl-auto=validate`. Automatic ba
 
 V1 deliberately preserves historical Java `LocalDateTime` as PostgreSQL `timestamp without time zone`. A's active V3 requires `LEGACY_TIME_ZONE` when legacy metric rows exist and converts them to UTC instants; do not infer an unknown historical zone. Migration ownership is coordinated as V1 legacy/A coordination, V2 Part B, V3 Part A, and active V4 Part C. V4 acquires the target-table lock, validates retained rows, creates the C tables, and backfills exactly one state and version-1 policy per target in one transaction. Invalid retained rows abort the migration without normalization.
 
-The B database write service requires `MonitoringLifecyclePort` and calls it synchronously inside the row-locked write transaction. Lifecycle failures propagate and roll back the B target, audit, C rows, and common outbox together. B response/status reads and A's existing four-column `database_configs` display writer remain in place until a future metric-driven C state consumer is ready to own live status.
+The B database write service requires `MonitoringLifecyclePort` and calls it synchronously inside the row-locked write transaction. Lifecycle failures propagate and roll back the B target, audit, C rows, and common outbox together. The C metric-driven state consumer owns live status updates; B response/status reads and A's existing four-column `database_configs` display writer remain the compatibility boundary during rollout.
 
 ## Common outbox
 
@@ -45,3 +45,21 @@ For activation, stop and drain old application writers before applying V4; hold
 the database lock until the migration commit completes, then start the new
 binary before allowing writes. This repository documents the handoff only; no
 shared deployment is claimed here.
+
+## Part C backend handoff
+
+The backend contract and the browser handoff are documented in
+[`docs/part-c-risk-notifications.md`](../docs/part-c-risk-notifications.md),
+[`docs/api.md`](../docs/api.md), [`docs/events.md`](../docs/events.md), and
+[`docs/integration-handoff.md`](../docs/integration-handoff.md). The three
+activation flags are fail-closed and independent: `RISK_ENABLED`,
+`REALTIME_ENABLED`, and `NOTIFICATIONS_ENABLED` default to `false`. Realtime
+still requires A V3 `processed_events`; notification delivery uses the
+process-lifetime PostgreSQL advisory lease and revalidates the recipient
+session immediately before an external attempt.
+
+The frontend owns the user gesture, permission prompt, service-worker
+registration, same-origin incident navigation, and browser/device acceptance.
+The backend provides the public DTO/STOMP/Push contracts and local provider
+fixtures only. This repository does not claim shared deployment, exactly-once
+provider delivery, or real mobile/provider acceptance.

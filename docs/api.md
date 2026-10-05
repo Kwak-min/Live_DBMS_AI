@@ -4,7 +4,7 @@
 
 [전체 기준](integration-contract-draft.md) · [이벤트](events.md) · [보안](integration-security.md) · [운영](integration-operations.md)
 
-정상·warmup·실패·사건·Heartbeat 예제는 [contract-examples.json](contract-examples.json)의 fixtures에서 바로 사용할 수 있다.
+Part C의 정상·실패·사건·알림 예제는 [권위 있는 Part C fixture](contract-examples/part-c.json)에서 바로 사용할 수 있다.
 
 ## 1. 공통 타입·HTTP 계약
 
@@ -16,6 +16,10 @@
 - 응답에 `X-Request-Id`, `Cache-Control:no-store`. 요청마다 서버 UUID를 생성한다. JSON 본문 최대 64KiB(초과 413), 문자열은 명시한 길이의 Unicode code point 기준; 비밀번호는 보안 문서의 바이트 제한을 따른다.
 - 클라이언트 자동 재시도는 GET과 명시적 401 갱신에 한정한다. POST/PATCH/PUT/DELETE 타임아웃은 먼저 상태 재조회한다. 로그인 외 일반 API는 동일 사용자 초당 30회, burst 60회; 429 Retry-After는 초 단위다.
 - GET latest/recent/history는 각각 보호 API다. 액세스 판정·입력 오류도 공통 오류 DTO를 사용한다.
+
+UUID request path and query values use the canonical lowercase form
+`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`; uppercase or non-canonical UUID text is
+`400 VALIDATION_ERROR`. Response UUID examples use the same lowercase form.
 
 ### 공통 오류 DTO
 
@@ -146,6 +150,11 @@ Metric 필드는 [지표 사전](events.md)과 아래 예제로 고정한다. �
 
 StatusSnapshot: `{databaseConfigId:Id,configVersion:Id,deleted:boolean,enabled:boolean,connectionStatus:UP|DOWN|UNKNOWN,dataFreshness:FRESH|STALE|NO_DATA|PAUSED,riskLevel:INFO|WARNING|CRITICAL|FATAL|null,lastAttemptAt:Time?,lastSuccessAt:Time?,latestMetricId:Id?,openIncidentIds:Uuid[],stateVersion:Id,updatedAt:Time}`. 미관측 대상도 200이다. V4 migration은 enabled·nondeleted 대상에 하나의 `date_trunc('milliseconds', transaction_timestamp())` activation epoch를 사용해 `NO_DATA`를 초기화하고, disabled/deleted 대상은 activation 없이 `PAUSED`로 초기화한다. Historical metric은 C attempt/success/latestMetric을 채우지 않는다. Future `cg:risk` consumer만 activation epoch 이후에 수집된 metric으로 `FRESH`/`STALE`/risk/incident 값을 갱신할 수 있다; 그 consumer 전에는 이 integration이 risk/stale/notification 평가를 제공한다고 해석하지 않는다. 그 consumer가 활성화되면 현재 configVersion에서 accepted collection이 아직 없을 때 `activationAt`을 기준으로 `now < activationAt + staleAfterSeconds`인 동안 enabled 대상의 `dataFreshness=NO_DATA`를 유지하고, accepted collection이 있으면 마지막 `collectionAttemptTime`으로 stale을 계산한다. 정확히 각 기준 시각에 `staleAfterSeconds`가 경과하면 `STALE`로 전환하고 `COLLECTION_STALE` 타이머 사건을 severity=CRITICAL로 연다. `riskLevel`은 모든 OPEN 사건 중 최고 severity이고 동시에 FATAL 사건이 OPEN이면 FATAL이다. 기본 정책에서는 activationAt=t=0일 때 t=29초가 NO_DATA이고 t=30초가 STALE이다. enabled=false이면 항상 PAUSED이며 riskLevel=null이다. 삭제된 대상은 404다. 일반 REST 응답의 deleted는 false다. stateVersion은 대상별 증가하며 설정 변경/재시작에도 감소하지 않는다. B status reads와 A의 기존 `database_configs` four-column display writer는 metric-driven C state consumer가 준비될 때까지 유지한다.
 
+`severityTransition` is an internal `IncidentUpdatedEvent` field only. It is
+never part of `Incident` or `StatusSnapshot` REST responses. The only accepted
+values are `INCREASED` and `DECREASED`; created and resolved events omit it.
+The realtime adapter removes it before the public STOMP Incident shape.
+
 PolicyWrite: `{version:Id,staleAfterSeconds:int,notificationCooldownSeconds:int,rules:Rule[]}`. RiskPolicy는 위 필드에 databaseConfigId·updatedAt을 추가한다. DB 생성 시 기본 정책 version=1을 제공한다. `staleAfterSeconds`는 30~300, `notificationCooldownSeconds`는 기본 300초이며 60~3600초다. cooldown 중인 상승 전달은 마지막 성공 개시/상승 알림 뒤의 `eligibleAt`까지 대기하고, 같은 사건·수신처의 최신 비-FATAL 상승으로 병합해도 처음 정한 `eligibleAt`을 미루지 않는다. FATAL 상승은 대기 중 비-FATAL 상승 작업을 취소/대체하고 즉시 발송한다. 이 스케줄링 시각은 내부 저장·전달 규칙을 따른다. version이 다르면 409 POLICY_VERSION_CONFLICT.
 
 Rule은 `{ruleId:Text,metricName:Text,operator:"GTE",warningThreshold:number,criticalThreshold:number,fatalThreshold:number?,sustainSeconds:int,recoverySeconds:int,enabled:boolean}`. rules에는 CONNECTION_RATIO와 SLOW_QUERY_RATE 두 개를 정확히 한 번씩 포함한다. 임의 규칙 추가/삭제는 400, enabled로 활성화한다.
@@ -186,13 +195,29 @@ AccessLog: `{id:Id,actorId:Id?,method:Text,path:Text,statusCode:int,durationMs:i
 | DELETE `/api/v1/notifications/webhooks/{id}` | 없음 | 204 삭제, 없는 ID도 204, ADMIN |
 | GET `/api/v1/notifications/deliveries` | incidentId,channel,status,start,end,page,size | 200 Delivery 페이지, createdAt DESC·id DESC, ADMIN |
 
-PushInput: `{endpoint:Text,expirationTime:int?,keys:{p256dh:Text,auth:Text}}` 모두 필수. endpoint는 HTTPS URL 최대 2048, p256dh는 base64url 디코딩 후 65바이트, auth는 16바이트. expirationTime은 epoch milliseconds 또는 null로 외부 Web Push 표준에 맞춘 시간 형식의 예외다. 과거 만료값은 400. 본인당 최대 10개, 타인의 활성 endpoint 재등록은 409 RESOURCE_LIMIT_EXCEEDED. 기존 구독이 해제/로그아웃으로 비활성화되면 새 소유자의 별도 ID로 등록할 수 있다. 이전 tombstone과 발송 이력의 소유자를 변경하지 않는다.
+`PushInput` is `{endpoint:Text,expirationTime:int?,keys:{p256dh:Text,auth:Text}}`.
+All three members are required JSON members; `expirationTime` is required even
+when its value is `null`. A non-null value is epoch milliseconds in the safe
+integer range and must be in the future. The response exposes only `id`,
+`createdAt`, `updatedAt`, and nullable `expirationTime`; endpoint and key
+material are never returned.
+
+Push registration is bound to the authenticated session. Logout, session
+expiry/reuse revocation, and role/status revocation synchronously tombstone the
+subscription before that session can be removed. The delivery worker performs a
+fresh session/recipient check immediately before send and marks the delivery
+`CANCELLED` when the check fails. Explicit Push DELETE synchronously tombstones
+the subscription and cancels its pending deliveries in the same transaction;
+the API does not promise an immediate status update for unrelated in-flight
+delivery reads. endpoint is HTTPS URL 최대 2048, p256dh는 base64url 디코딩 후
+65바이트, auth는 16바이트다. 과거 만료값은 400이며 본인당 최대 10개다.
+타인의 활성 endpoint 재등록은 409 RESOURCE_LIMIT_EXCEEDED다.
 
 PushSubscription: `{id:Id,createdAt:Time,updatedAt:Time,expirationTime:int?}`. endpoint/keys 미반환. 전체 대상의 사건 알림을 해당 사용자 기기로 보낸다. 권한 철회·계정 비활성화·로그아웃 후에는 해당 로그인 세션에서 등록한 구독을 비활성화하며 새 로그인에서 재등록한다.
 
 WebhookInput: `{name:Text,provider:"SLACK",url:Text,enabled:boolean}`. name trim 후 1~100, url 최대 2048; 모두 필수. provider는 수정 불가. 최대 10개. Webhook: `{id:Id,name:Text,provider:"SLACK",enabled:boolean,createdAt:Time,updatedAt:Time}`. URL·토큰 미반환. Slack 연결/발송 규격은 events.md, URL 검사는 보안 규격을 따른다.
 
-Delivery: `{id:Id,incidentId:Uuid,incidentVersion:Id,channel:WEB_PUSH|SLACK,recipientId:Id,status:PENDING|SENT|FAILED|CANCELLED,attemptCount:int,lastErrorCode:Text?,createdAt:Time,sentAt:Time?}`. 알림 결과 목록 기간은 createdAt 기준, 기본 24시간/최대 30일. 오류 코드는 TIMEOUT/RATE_LIMITED/RECIPIENT_GONE/REJECTED/PROVIDER_ERROR다. 수신처 삭제·이벤트 노후화는 CANCELLED이고 실패 재시도 대상으로 넣지 않는다. `eligibleAt`·`expiresAt`은 내부 스케줄러 컬럼이며 공개 Delivery 응답에는 추가하지 않는다.
+Delivery: `{id:Id,incidentId:Uuid,incidentVersion:Id,channel:WEB_PUSH|SLACK,recipientId:Id,status:PENDING|SENT|FAILED|CANCELLED,attemptCount:int,lastErrorCode:Text?,createdAt:Time,sentAt:Time?}`. 알림 결과 목록 기간은 createdAt 기준, 기본 24시간/최대 30일. 오류 코드는 TIMEOUT/RATE_LIMITED/RECIPIENT_GONE/REJECTED/PROVIDER_ERROR다. 수신처 삭제·이벤트 노후화는 CANCELLED이고 실패 재시도 대상으로 넣지 않는다. `eligibleAt`은 `expiresAt - 600 seconds`로 계산하는 내부 논리 값이며 공개 Delivery 응답에는 추가하지 않는다. active V4 physical values are `expires_at` and `next_attempt_at`; send/retry at or after `expiresAt` is `CANCELLED` and retries never extend the original window.
 
 ## 8. 기준 커밋의 현재 REST 구현
 
@@ -210,7 +235,7 @@ Delivery: `{id:Id,incidentId:Uuid,incidentVersion:Id,channel:WEB_PUSH|SLACK,reci
 | POST | `/api/v1/projects/{id}/unblock` | reason, approvedBy | 200 해제 결과; 없는 대상 404, 미차단 409 |
 | POST | `/api/v1/projects/{id}/toggle` | reason, approvedBy | 200 전환 결과; 없는 대상 404 |
 
-코드 근거: [MetricController](../backend/src/main/java/com/example/monitoring/controller/MetricController.java), [DatabasePingController](../backend/src/main/java/com/example/monitoring/controller/DatabasePingController.java), [ProjectIsolationController](../backend/src/main/java/com/example/monitoring/controller/ProjectIsolationController.java).
+현재 코드 근거: [MetricController](../backend/src/main/java/com/example/monitoring/controller/MetricController.java), [DatabasePingController](../backend/src/main/java/com/example/monitoring/controller/DatabasePingController.java). 이전 통합 초안에서 사용한 `backend/src/main/java/com/example/monitoring/controller/ProjectIsolationController.java` 경로는 현재 트리에 없는 역사적 참조이므로 활성 코드 링크로 취급하지 않는다.
 
 현재 DTO:
 

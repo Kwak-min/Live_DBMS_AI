@@ -2,16 +2,16 @@
 
 This is the checked-source handoff for the Part C realtime slice on active V4.
 It describes the current metric stream path, lifecycle boundary, and the
-remaining future metric-driven live-state consumer. It is an implementation
-handoff, not a release or deployment approval.
+metric-driven live-state consumer. It is an implementation handoff, not a
+release or deployment approval.
 
 ## Candidate and migration status
 
-The C candidate is based on the merged Actual A V3 baseline with the forward-
+The Part C backend is based on the merged Actual A V3 baseline with the forward-
 only C V4 migration. B production database callers require the synchronous
 `MonitoringLifecyclePort` inside their existing write transaction. This
-document does not claim a risk engine, notification delivery, or a live-status
-read switch; those remain future consumers of the durable C state.
+document records source and contract boundaries; environment migration activation
+and native acceptance remain separate evidence gates.
 
 The migration order is deliberately:
 
@@ -82,11 +82,11 @@ The current adapter publishes:
 /topic/databases/{databaseConfigId}/metrics
 ```
 
-`StompDestination` accepts the contract's `status` and `incidents` topic forms,
-but this candidate has no status producer or incident producer yet. Those
-topics therefore do not imply that status or incident events are currently
-emitted. The `/user/queue/errors` destination is reserved for subscription
-errors.
+`StompDestination` accepts the contract's `status` and `incidents` topic forms.
+The backend includes status and incident stream workers and broadcast adapters;
+their delivery remains controlled by the realtime flag and the configured
+source streams. The `/user/queue/errors` destination is reserved for
+subscription errors.
 
 The metric envelope keeps the source event ID:
 
@@ -316,3 +316,19 @@ deployment, stop and drain old application writers, keep the migration lock
 until its commit completes, and start the new binary before reopening writes.
 The Compose commands above are local recipes and require Docker Compose; no
 Docker execution is implied by this document.
+
+### Incident transition visibility
+
+The internal incident stream accepts `severityTransition=INCREASED` or
+`DECREASED` only on `IncidentUpdatedEvent`. Created and resolved events omit the
+field. The realtime parser consumes the internal hint, then removes it before
+the `/topic/databases/{id}/incidents` STOMP data shape. REST and STOMP clients
+consume the public Incident fields and never receive the transition hint or
+delivery scheduling fields.
+
+The public Web Push navigation field is `url` with a same-origin relative value
+such as `/incidents/<UUID>`. The service-worker implementation and browser
+permission flow remain frontend responsibilities. The existing A
+`processed_events` table, metric path, B status reads, and A four-column
+`database_configs` display writer remain in place until the relevant C consumer
+has passed the native gate.

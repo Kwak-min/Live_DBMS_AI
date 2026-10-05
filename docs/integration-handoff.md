@@ -126,3 +126,30 @@
 3. 변경한 계약의 실제 성공·빈 결과·실패 JSON과 Redis/STOMP 메시지를 보관한다. 명세 문장만으로 연동 성공을 판정하지 않는다.
 4. 단위·계약 테스트 후 T01~T28 중 담당 범위와 전체 로그인→등록→수집→구독→장애→알림→복구 시나리오를 실제 환경에서 실행한다.
 5. 미완료 기능은 완료로 표시하지 않는다. 코드 합치기/배포·외부 알림 실제 전송은 해당 실행 작업에서 수행한다. 이번 초안 작업은 저장소 업로드나 팀 메시지 전송을 포함하지 않는다.
+
+### Part C Web Push handoff (backend contract)
+
+After a user gesture, the frontend registers its service worker, requests the
+browser permission, obtains `PushSubscription`, and sends this JSON to
+`POST /api/v1/notifications/push-subscriptions`:
+
+```json
+{
+  "endpoint": "https://push.example.test/send/opaque-token",
+  "expirationTime": null,
+  "keys": {"p256dh": "<base64url>", "auth": "<base64url>"}
+}
+```
+
+`expirationTime` is a required member and may be `null`; a non-null value is
+future epoch milliseconds. The backend stores endpoint and keys encrypted and
+returns no secret material. Logout, session expiry/reuse, or role/status
+revocation synchronously tombstones the subscription. The worker rechecks the
+session immediately before send and marks a pending delivery `CANCELLED` when
+the check fails. Explicit `DELETE` synchronously cancels pending deliveries.
+
+The public Push payload navigates with `url: "/incidents/<UUID>"`; it does not
+use `path`. The frontend owns same-origin
+navigation after login, permission-denied UI, browser support, service-worker
+code, and real-device acceptance. This handoff does not claim provider/mobile
+delivery, deployment, or exactly-once behavior.

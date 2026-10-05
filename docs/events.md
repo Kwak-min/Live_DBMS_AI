@@ -2,7 +2,7 @@
 
 **팀 배포용 v1 개발 기준**. [REST](api.md) / [전체 기준](integration-contract-draft.md) / [운영](integration-operations.md) / [보안](integration-security.md). JSON은 설명용 예시이며 실제 캡처가 아니다. 현재 발행 코드의 형태는 마지막 절에 따로 기록한다.
 
-정상·warmup·실패·사건·Heartbeat 예제는 [contract-examples.json](contract-examples.json)의 fixtures에서 바로 사용할 수 있다.
+Part C의 정상·실패·사건·알림 예제는 [권위 있는 Part C fixture](contract-examples/part-c.json)에서 바로 사용할 수 있다.
 
 ## 1. 지표 사전
 
@@ -44,6 +44,14 @@ Redis Stream의 hash 필드는 정확히 `payload` 하나이며 값은 UTF-8 JSO
 
 허용 타입은 MetricCollectedEvent, MonitoringStatusChangedEvent, IncidentCreatedEvent, IncidentUpdatedEvent, IncidentResolvedEvent, CollectorHeartbeatEvent다. 정의된 필드는 모두 전송하고 nullable만 null로 둔다. consumer는 미지의 선택 필드는 무시하지만 모르는 버전/타입·필수 누락·타입/enum 오류는 DLQ 처리한다. payload 최대 64KiB.
 
+For `IncidentUpdatedEvent`, the producer must persist the internal
+`severityTransition` value in the same incident/outbox transaction. The field
+is required and accepts only `INCREASED` or `DECREASED`. `IncidentCreatedEvent`
+and `IncidentResolvedEvent` omit it. The notification parser rejects a missing,
+unknown, or misplaced value; the realtime adapter strips it before broadcasting
+the public Incident shape. REST and STOMP clients therefore never infer a
+transition from severity history.
+
 ### MetricCollectedEvent — A 생산
 
 REST Metric의 전체 필드를 포함하되 `id`만 `metricId`로 매핑하고 `databaseName`(표시명)을 추가한다. host/port/username/password는 제외한다. metricId는 저장된 스냅샷과 동일하다.
@@ -80,7 +88,16 @@ REST Metric의 전체 필드를 포함하되 `id`만 `metricId`로 매핑하고 
 }
 ```
 
-실패해도 같은 구조를 발행한다. CONNECTION_FAILED이면 원본/파생 수치를 null로 하고, 기존 lastSuccessAt과 실패까지 responseTimeMs는 유지한다. errorCode와 실패 지표의 unavailableMetrics는 반드시 채운다. 수집 실패를 메시지 미발행으로 표현하지 않는다. PostgreSQL 자체 장애로 저장하지 못한 경우만 발행을 보류하고 별도 운영 장애로 기록한다.
+실패해도 같은 구조를 발행한다. credential을 읽을 수 없거나 복호화할 수
+없는 경우 `collectionStatus=CONNECTION_FAILED`, `errorCode=INTERNAL_ERROR`,
+`responseTimeMs=0`으로 기록하며 공개 connectionStatus는 `DOWN`, 원인은
+`CONNECTION_FAILURE`로 매핑한다. 연결을 시작한 뒤 실패한 경우에는 실패까지
+측정한 responseTimeMs를 유지하되 같은 `CONNECTION_FAILED`/
+`CONNECTION_FAILURE` 의미를 사용한다. `PARTIAL_FAILURE`는 연결된 수집에서
+일부 필수 query만 사용할 수 없을 때만 사용한다. errorCode와 실패 지표의
+unavailableMetrics는 반드시 채운다. 수집 실패를 메시지 미발행으로 표현하지
+않는다. PostgreSQL 자체 장애로 저장하지 못한 경우만 발행을 보류하고 별도
+운영 장애로 기록한다.
 
 ### MonitoringStatusChangedEvent — C 생산
 
@@ -114,7 +131,7 @@ REST Metric의 전체 필드를 포함하되 `id`만 `metricId`로 매핑하고 
 - connectionStatus는 SUCCESS이면 UP, CONNECTION_FAILED이면 DOWN, PARTIAL_FAILURE/관측 전은 UNKNOWN이다. lastSuccessAt은 SUCCESS에만 갱신한다.
 - 정책 변경은 `CONNECTION_RATIO`·`SLOW_QUERY_RATE`처럼 현재 정책으로 설정할 수 있는 metric-rule 사건만 `POLICY_CHANGED`로 행정 종료하고 그 후보 타이머를 초기화한다. `CONNECTION_FAILURE`·`COLLECTION_STALE` 시스템 사건과 타이머는 정책 변경 중에도 유지한다. 수동 중단·삭제·설정 변경은 api.md의 resolutionReason으로 해당 OPEN 사건을 행정 종료하고 실제 복구 알림을 보내지 않는다. 상태·사건·중복 기록·outbox는 같은 트랜잭션으로 저장한다.
 
-재시작 시 저장된 OPEN 사건과 마지막 metricId를 복구하고 지속 후보 타이머는 초기화한다. 생성 후 staleAfterSeconds보다 오래된 메트릭은 과거 기록으로만 처리한다. 알림 작업의 `eligibleAt`·`expiresAt`·`nextAttemptAt`은 DB에서 복구하며, delayed worker는 저장된 `expiresAt`을 지켜 만료 작업을 CANCELLED로 처리하고 재시작을 이유로 창을 연장하지 않는다. pending을 재생했다는 이유로 옛 장애 알림/정상 복구를 새로 생성하지 않는다. C는 DB의 최신 메트릭을 확인하여 현재보다 오래된 Redis 이벤트가 최신값을 덮어쓰지 못하게 한다.
+재시작 시 저장된 OPEN 사건과 마지막 metricId를 복구하고 지속 후보 타이머는 초기화한다. 생성 후 staleAfterSeconds보다 오래된 메트릭은 과거 기록으로만 처리한다. `expiresAt`와 `nextAttemptAt`은 DB에 저장해 재시작 후 복구한다. `eligibleAt`은 `expiresAt - 600 seconds`로 다시 계산하는 논리 값이며 별도 V4 column을 전제로 하지 않는다. 재시작·merge·retry는 원래 `expiresAt`을 연장하지 않는다. pending을 재생했다는 이유로 옛 장애 알림/정상 복구를 새로 생성하지 않는다. C는 DB의 최신 메트릭을 확인하여 현재보다 오래된 Redis 이벤트가 최신값을 덮어쓰지 못하게 한다.
 
 ## 4. Redis 전달·ACK·복구
 
@@ -185,8 +202,14 @@ CONNECT native 헤더는 Authorization:Bearer <access>, accept-version:1.2, hear
 - OPEN은 즉시 1회. 심각도 상승은 마지막 성공 개시/상승 알림에서 `notificationCooldownSeconds`(기본 300초, 60~3600초) 안이면 첫 대기 작업의 `eligibleAt`을 다음 허용 시각으로 정하고, `expiresAt=eligibleAt+600초`로 저장한다. 같은 사건·수신처의 더 새로운 비-FATAL 상승은 최신 incidentVersion/내용으로 병합하되 처음 정한 `eligibleAt`·`expiresAt`을 뒤로 미루지 않는다. `now < eligibleAt`은 cooldown 대기이고 `eligibleAt <= now < expiresAt`만 외부 발송·재시도 창이다. FATAL 상승은 대기 중인 비-FATAL 상승 작업을 CANCELLED로 대체하고 cooldown을 우회해 즉시 보내며, 하향은 알리지 않는다. 지속 장애에 정기 재알림은 없다.
 - RECOVERED는 cooldown을 우회해 즉시 1회 만들고, 단 해당 수신처에 개시/상승 알림을 성공 발송한 적이 있을 때만 보낸다. POLICY_CHANGED/MONITORING_PAUSED/CONFIG_CHANGED/TARGET_DELETED 종료는 알리지 않는다.
 - 발송 직전에 저장된 사건 버전·상태, 수신처/사용자/세션 활성 여부를 검사한다. 이미 복구된 사건의 미발송 OPEN/상승은 CANCELLED, 오래된 상승은 기존 대기 작업의 최신 내용으로 병합, 삭제 수신처도 CANCELLED다. `now >= expiresAt`인 작업은 CANCELLED이며, 생성 시각이 아니라 저장된 `eligibleAt` 기준의 600초 창을 사용한다.
-- 작업 고유 키 `(incidentId,incidentVersion,channel,recipientId)`로 저장 후 Redis ACK. `eligibleAt`에 첫 시도, 이후 +5/+30/+120초 재시도, 429의 Retry-After가 더 길어도 `expiresAt` 이후로는 연장하지 않는다. `404/410` 수신처는 비활성화, 그 외 영구 4xx는 FAILED, 5xx/timeout만 재시도한다. `eligibleAt`·`expiresAt`·`nextAttemptAt`은 영속화하여 재시작 후에도 cooldown 대기와 active send/retry 창을 구분한다.
+- 작업 고유 키 `(incidentId,incidentVersion,channel,recipientId)`로 저장 후 Redis ACK. `eligibleAt`에 첫 시도, 이후 +5/+30/+120초 재시도, 429의 Retry-After가 더 길어도 `expiresAt` 이후로는 연장하지 않는다. `404/410` 수신처는 비활성화, 그 외 영구 4xx는 FAILED, 5xx/timeout만 재시도한다. `eligibleAt`은 immutable logical value `expiresAt - 600 seconds`이며 worker는 `nextAttemptAt`만 변경한다. `now >= expiresAt`인 발송·재시도는 `CANCELLED`이며 창을 재개하거나 연장하지 않는다.
 - 외부 서비스의 성공 응답을 잃은 경우 재시도로 중복 수신될 수 있다. 내부 사건/작업 중복 방지와 외부 정확히 한 번 배달을 동일하게 표현하지 않는다.
+
+`eligibleAt` is the immutable logical value `expiresAt - 600 seconds`. A worker
+may move only `nextAttemptAt`; any send or retry at `now >= expiresAt` is
+`CANCELLED` and does not reopen or extend the window. The Web Push public
+payload uses the same-origin relative `url` field, for example
+`/incidents/<UUID>`; `path` is not a contract field.
 
 ### Slack
 
@@ -226,6 +249,6 @@ type은 INCIDENT_OPENED/SEVERITY_INCREASED/INCIDENT_RESOLVED. body 최대 300자
 | 발행 실패 | Redis 오류는 로그 후 null 반환. 스케줄러는 성공 여부를 확인하지 않고 진행. 저장/발행 사이 복구 기록 없음 |
 | 소비·복구 | Consumer Group, ACK, pending 복구, STOMP 서버 구현 없음 |
 
-근거: [MetricCollectedEvent](../backend/src/main/java/com/example/monitoring/dto/MetricCollectedEvent.java), [IncidentCreatedEvent](../backend/src/main/java/com/example/monitoring/dto/IncidentCreatedEvent.java), [수집 발행기](../backend/src/main/java/com/example/monitoring/infrastructure/redis/RedisStreamPublisher.java), [사건 발행기](../backend/src/main/java/com/example/monitoring/infrastructure/redis/IncidentPublisher.java), [RedisConfig](../backend/src/main/java/com/example/monitoring/infrastructure/redis/RedisConfig.java).
+근거: [MetricCollectedEvent](../backend/src/main/java/com/example/monitoring/dto/MetricCollectedEvent.java), [IncidentCreatedEvent](../backend/src/main/java/com/example/monitoring/dto/IncidentCreatedEvent.java), [사건 발행기](../backend/src/main/java/com/example/monitoring/infrastructure/redis/IncidentPublisher.java), [RedisConfig](../backend/src/main/java/com/example/monitoring/infrastructure/redis/RedisConfig.java). 이전 통합 초안에서 사용한 `backend/src/main/java/com/example/monitoring/infrastructure/redis/RedisStreamPublisher.java` 경로는 현재 트리에 없는 역사적 참조이므로 활성 코드 링크로 취급하지 않는다.
 
 현재 `databaseName`에는 실제 MariaDB 스키마가 아닌 `DatabaseConfig.name` 표시명이 들어간다. 시간은 LocalDateTime + 직접 구성한 ObjectMapper이므로 날짜 문자열/배열 여부와 시간대부터 샘플로 확인해야 한다. 새로운 소비자가 임의로 ISO UTC라고 가정하면 안 된다.
