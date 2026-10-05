@@ -6,6 +6,8 @@ import com.example.monitoring.auth.domain.UserRole;
 import com.example.monitoring.auth.repository.UserAccountRepository;
 import com.example.monitoring.auth.service.AccessTokenService;
 import com.example.monitoring.auth.service.PasswordHashingService;
+import com.example.monitoring.database.security.DatabaseCredentialCrypto;
+import com.example.monitoring.realtime.redis.MetricPayloadParser;
 import com.example.monitoring.database.security.EncryptedValue;
 import com.example.monitoring.integration.PartCNativeQaEvidence;
 import com.example.monitoring.notification.delivery.NotificationDeliveryTransaction;
@@ -70,6 +72,7 @@ import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.InetAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -162,6 +165,9 @@ class PartCNativeQaTest {
 
     @Autowired
     private PasswordHashingService passwordHashingService;
+
+    @Autowired
+    private DatabaseCredentialCrypto credentialCrypto;
 
     @Autowired
     private AccessTokenService accessTokenService;
@@ -443,7 +449,7 @@ class PartCNativeQaTest {
         assertThat((Instant) retryState.get("next_attempt_at"))
                 .isBefore((Instant) retryState.get("expires_at"));
         jdbc.update("""
-                UPDATE risk_policies SET stale_after_seconds=3600
+                UPDATE risk_policies SET stale_after_seconds=300
                 WHERE database_config_id=?
                 """, RESTART_TARGET_ID);
         PartCNativeQaEvidence.write("notification-retry-pre-restart.json", Map.of(
@@ -633,11 +639,19 @@ class PartCNativeQaTest {
                 "hooks.slack.com",
                 slackPort,
                 ignored -> LocalTlsProviderFixture.Response.immediate(200, "ok"));
-             LocalSlackClient local = localSlackClient(fixture, slackPort)) {
+             LocalSlackClient local = localSlackClient(fixture, slackPort);
+             PostgresDeliveryLease retryLease = new PostgresDeliveryLease(dataSource)) {
             NotificationDeliveryWorker replacement = nativeDeliveryWorker(
-                    local.sender(), local.policy(), new SlackAttemptPacer());
+                    retryLease, local.sender(), local.policy(), new SlackAttemptPacer());
             assertThat(replacement.runOnce()).isEqualTo(1);
             fixture.awaitCaptureCount(1, Duration.ofSeconds(5));
+            assertThat(retryLease.verifyHeld()).isTrue();
+            try (PostgresDeliveryLease contender = new PostgresDeliveryLease(dataSource)) {
+                assertThat(contender.tryAcquire()).isFalse();
+            }
+        }
+        try (PostgresDeliveryLease contender = new PostgresDeliveryLease(dataSource)) {
+            assertThat(contender.tryAcquire()).isTrue();
         }
         Map<String, Object> after = deliveryState(deliveryId);
         assertThat(after)
@@ -692,13 +706,15 @@ class PartCNativeQaTest {
             await("lease-loss retry due", EVENT_TIMEOUT,
                     () -> !clock.instant().truncatedTo(ChronoUnit.MILLIS).isBefore(due));
 
-            NotificationDeliveryWorker replacement = nativeDeliveryWorker(
-                    local.sender(), local.policy(), new SlackAttemptPacer());
-            assertThat(replacement.runOnce()).isEqualTo(1);
-            fixture.awaitCaptureCount(1, Duration.ofSeconds(5));
-            assertThat(deliveryState(deliveryId))
-                    .containsEntry("status", "SENT")
-                    .containsEntry("attempt_count", 2);
+            try (PostgresDeliveryLease replacementLease = new PostgresDeliveryLease(dataSource)) {
+                NotificationDeliveryWorker replacement = nativeDeliveryWorker(
+                        replacementLease, local.sender(), local.policy(), new SlackAttemptPacer());
+                assertThat(replacement.runOnce()).isEqualTo(1);
+                fixture.awaitCaptureCount(1, Duration.ofSeconds(5));
+                assertThat(deliveryState(deliveryId))
+                        .containsEntry("status", "SENT")
+                        .containsEntry("attempt_count", 2);
+            }
         }
     }
 
@@ -706,7 +722,7 @@ class PartCNativeQaTest {
         Instant observedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         seedTarget(ROLLBACK_TARGET_ID, "native-rollback", observedAt.minusSeconds(5));
         jdbc.update("""
-                UPDATE risk_policies SET stale_after_seconds=3600
+                UPDATE risk_policies SET stale_after_seconds=300
                 WHERE database_config_id=?
                 """, ROLLBACK_TARGET_ID);
         PublishedMetric metric = prepareSuccessMetric(
@@ -934,12 +950,19 @@ class PartCNativeQaTest {
     }
 
     private void seedTarget(long id, String name, Instant activationAt) throws Exception {
+        EncryptedValue username = credentialCrypto.encrypt(id, "username", "native-fixture-user");
+        EncryptedValue password = credentialCrypto.encrypt(id, "password", "native-fixture-password");
         jdbc.update("""
                 INSERT INTO database_configs
                     (id, collection_interval_seconds, created_at, enabled, host, name, port, status,
-                     config_version, deleted_at)
-                VALUES (?, 5, ?, true, '127.0.0.1', ?, 13306, 'UNKNOWN', 1, null)
-                """, id, Timestamp.from(activationAt), name);
+                     config_version, deleted_at, database_name,
+                     username_key_version, username_nonce, username_ciphertext,
+                     password_key_version, password_nonce, password_ciphertext)
+                VALUES (?, 5, ?, true, '127.0.0.1', ?, 13306, 'UNKNOWN', 1, null,
+                        'native_fixture', ?, ?, ?, ?, ?, ?)
+                """, id, Timestamp.from(activationAt), name,
+                username.keyVersion(), username.nonce(), username.ciphertext(),
+                password.keyVersion(), password.nonce(), password.ciphertext());
         jdbc.update("""
                 INSERT INTO monitoring_states
                     (database_config_id, config_version, state_version, enabled, deleted,
@@ -980,24 +1003,32 @@ class PartCNativeQaTest {
             long maxConnections,
             double slowRate
     ) throws Exception {
+        Map<String, MetricCollectedPayloadV1.UnavailableReason> unavailable = Map.of(
+                "cpuUsage", MetricCollectedPayloadV1.UnavailableReason.UNSUPPORTED,
+                "memoryUsage", MetricCollectedPayloadV1.UnavailableReason.UNSUPPORTED,
+                "qps", MetricCollectedPayloadV1.UnavailableReason.UNSUPPORTED,
+                "threadsRunning", MetricCollectedPayloadV1.UnavailableReason.UNSUPPORTED,
+                "storageBytes", MetricCollectedPayloadV1.UnavailableReason.UNSUPPORTED);
         long metricId = jdbc.queryForObject("""
                 INSERT INTO metric_data (
                     active_connections, max_connections, slow_queries, slow_queries_delta,
                     slow_queries_per_second, metric_window_seconds, response_time_ms,
                     collection_status, created_at, database_config_id, timestamp,
                     config_version, collection_attempt_time, last_success_at, unavailable_metrics
-                ) VALUES (?, ?, 0, 0, ?, 5.0, 1, 'SUCCESS', ?, ?, ?, 1, ?, ?, '{}'::jsonb)
+                ) VALUES (?, ?, 0, 0, ?, 5.0, 1, 'SUCCESS', ?, ?, ?, 1, ?, ?, CAST(? AS jsonb))
                 RETURNING id
                 """, Long.class, activeConnections, maxConnections, slowRate,
                 Timestamp.from(observedAt), targetId, Timestamp.from(observedAt),
-                Timestamp.from(observedAt), Timestamp.from(observedAt));
+                Timestamp.from(observedAt), Timestamp.from(observedAt),
+                objectMapper.writeValueAsString(unavailable));
         MetricCollectedPayloadV1 payload = new MetricCollectedPayloadV1(
                 1, eventId, "MetricCollectedEvent", observedAt,
                 metricId, targetId, 1L, databaseName, observedAt, observedAt, observedAt,
                 null, null, activeConnections, maxConnections, null,
                 0L, 0L, slowRate, 5.0, null, null, 1L,
-                MetricCollectedPayloadV1.CollectionStatus.SUCCESS, null, null, Map.of());
+                MetricCollectedPayloadV1.CollectionStatus.SUCCESS, null, null, unavailable);
         String json = objectMapper.writeValueAsString(payload);
+        new MetricPayloadParser(objectMapper).parse(json.getBytes(StandardCharsets.UTF_8));
         return new PublishedMetric(eventId, json, metricId);
     }
 

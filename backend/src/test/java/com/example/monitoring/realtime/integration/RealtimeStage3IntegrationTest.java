@@ -9,6 +9,8 @@ import com.example.monitoring.auth.repository.UserAccountRepository;
 import com.example.monitoring.auth.service.AccessTokenService;
 import com.example.monitoring.auth.service.JwtKeySet;
 import com.example.monitoring.auth.service.PasswordHashingService;
+import com.example.monitoring.database.security.DatabaseCredentialCrypto;
+import com.example.monitoring.database.security.EncryptedValue;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.TargetDbStatus;
 import com.example.monitoring.realtime.event.MetricBroadcastPort;
@@ -169,6 +171,9 @@ class RealtimeStage3IntegrationTest {
 
     @Autowired
     private DatabaseConfigRepository databaseConfigs;
+
+    @Autowired
+    private DatabaseCredentialCrypto credentialCrypto;
 
     @Autowired
     private AccessTokenService accessTokenService;
@@ -697,16 +702,16 @@ class RealtimeStage3IntegrationTest {
     private void seedTargets() {
         databaseConfigs.deleteAll();
         jdbc.execute("SELECT setval(pg_get_serial_sequence('database_configs', 'id'), 11, true)");
-        DatabaseConfig active = databaseConfigs.saveAndFlush(target(true, null));
-        DatabaseConfig disabled = databaseConfigs.saveAndFlush(target(false, null));
-        DatabaseConfig deleted = databaseConfigs.saveAndFlush(target(true, LocalDateTime.now()));
+        DatabaseConfig active = databaseConfigs.saveAndFlush(target(ACTIVE_TARGET_ID, true, null));
+        DatabaseConfig disabled = databaseConfigs.saveAndFlush(target(DISABLED_TARGET_ID, false, null));
+        DatabaseConfig deleted = databaseConfigs.saveAndFlush(target(DELETED_TARGET_ID, true, LocalDateTime.now()));
         assertThat(active.getId()).isEqualTo(ACTIVE_TARGET_ID);
         assertThat(disabled.getId()).isEqualTo(DISABLED_TARGET_ID);
         assertThat(deleted.getId()).isEqualTo(DELETED_TARGET_ID);
     }
 
-    private DatabaseConfig target(boolean enabled, LocalDateTime deletedAt) {
-        return DatabaseConfig.builder()
+    private DatabaseConfig target(long id, boolean enabled, LocalDateTime deletedAt) {
+        DatabaseConfig target = DatabaseConfig.builder()
                 .name("stage3-target")
                 .host("127.0.0.1")
                 .port(3306)
@@ -717,6 +722,11 @@ class RealtimeStage3IntegrationTest {
                 .configVersion(2L)
                 .deletedAt(deletedAt)
                 .build();
+        EncryptedValue username = credentialCrypto.encrypt(id, "username", "native-fixture-user");
+        EncryptedValue password = credentialCrypto.encrypt(id, "password", "native-fixture-password");
+        target.storeEncryptedUsername(username.keyVersion(), username.nonce(), username.ciphertext());
+        target.storeEncryptedPassword(password.keyVersion(), password.nonce(), password.ciphertext());
+        return target;
     }
 
     private void seedUser() {
