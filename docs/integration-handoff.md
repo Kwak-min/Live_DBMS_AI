@@ -47,13 +47,15 @@
 
 ### C — 정책·위험도·사건·실시간·알림
 
-- [ ] RiskAssessmentEngine을 C 소유로 재사용하고 cg:risk 소비에 연결, 스냅샷/중복 기록/사건/outbox 원자 처리.
+이 목록은 통합 계획 체크리스트이며 완료 증거가 아니다. 현재 구현 및 검증 경계는 [C 위험도·알림 인계](part-c-risk-notifications.md)를 따른다.
+
+- [ ] V4의 네 규칙 상태 기반 엔진을 cg:risk 소비에 연결하고, 스냅샷/중복 기록/사건/outbox를 원자 처리.
 - [ ] 기본 정책 두 규칙+시스템 두 규칙, 지속/복구·partial/null·오래된 이벤트 처리·OPEN unique 제약.
 - [ ] LifecyclePort·stateVersion·삭제 tombstone·관리 종료 사유, 설정/정책 변경을 자동 복구와 구분.
 - [ ] 상태/정책/사건 조회·필터, incidents/monitoring_states/risk_rule_states 및 V4 migration.
 - [ ] Redis 그룹·pending reclaim·ACK·DLQ·24시간 안전 trim, 재시작/의존성 장애 복구.
 - [ ] simple broker/STOMP CONNECT·SUBSCRIBE 인증·토큰 만료·세션 종료·payload 변환.
-- [ ] Push/Slack CRUD, URL/endpoint 제한, 발송 작업 중복 방지·cooldown 병합·`eligibleAt`/`expiresAt` 영속화·재시작 후 만료 준수·재시도·수신처 해제, Delivery API.
+- [ ] Push/Slack CRUD, URL/endpoint 제한, 발송 작업 중복 방지·cooldown 병합·`expiresAt` 영속화·`eligibleAt`은 `expiresAt − 600초`로 계산·`next_attempt_at`에 다음 시도 시각 영속화·재시작 후 만료 준수·재시도·수신처 해제, Delivery API.
 
 ### 프론트 — 공통 로그인·관리·대시보드
 
