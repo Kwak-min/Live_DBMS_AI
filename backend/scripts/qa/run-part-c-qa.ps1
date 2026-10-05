@@ -63,16 +63,16 @@ foreach ($Candidate in $CandidateValues) {
         $ToolCandidates.Add([IO.Path]::GetFullPath($Candidate))
     }
 }
-$ToolRoot = @($ToolCandidates | Select-Object -Unique | Where-Object {
+$SelectedToolRoots = @($ToolCandidates | Select-Object -Unique | Where-Object {
     (Test-Path -LiteralPath (Join-Path $_ 'jdk17') -PathType Container) -and
     (Test-Path -LiteralPath (Join-Path $_ 'gradle-home\wrapper\dists\gradle-8.5-bin') -PathType Container) -and
     (Test-Path -LiteralPath (Join-Path $_ 'postgresql\pg16\bin\postgres.exe') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $_ 'redis\redis-7.4.11\src\redis-server') -PathType Leaf)
 } | Select-Object -First 1)
-if ($ToolRoot.Count -ne 1) {
+if ($SelectedToolRoots.Count -ne 1) {
     throw 'Part C tooling was not found. Pass -ToolRoot or set PART_C_TOOL_ROOT.'
 }
-$ToolRoot = $ToolRoot[0]
+$ToolRoot = $SelectedToolRoots[0]
 $JavaHome = @(Get-ChildItem -LiteralPath (Join-Path $ToolRoot 'jdk17') -Directory |
     Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'bin\java.exe') -PathType Leaf } |
     Select-Object -First 1).FullName
