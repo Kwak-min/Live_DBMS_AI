@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 class StrictEventNumericBoundaryTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "unrepresentableDecimal[{index}]")
     @ValueSource(strings = {
             "{\"future\":1e2147483648}",
             "{\"future\":1e-2147483649}",
@@ -74,7 +74,7 @@ class StrictEventNumericBoundaryTest {
                 });
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "schemaDlqBeforeAck[{index}]")
     @ValueSource(strings = {
             "{\"future\":1e2147483648}",
             "{\"future\":{\"nested\":[1e2147483648]}}"
