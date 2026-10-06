@@ -52,6 +52,10 @@ public class RiskStaleTransaction {
         RiskState state = locked.state();
         Instant basis = state.lastAttemptAt() == null
                 ? state.activationAt() : state.lastAttemptAt();
+        Instant durableAttempt = store.latestDurableAttempt(state, scan).orElse(basis);
+        if (durableAttempt.isAfter(basis)) {
+            basis = durableAttempt;
+        }
         Instant dueAt = basis.plusSeconds(locked.policy().staleAfterSeconds())
                 .truncatedTo(ChronoUnit.MILLIS);
         if (!dueAt.equals(millis(required.dueAt()))

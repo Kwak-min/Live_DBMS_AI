@@ -80,3 +80,13 @@ with caller-supplied tool roots and an evidence directory. Resolve the tested
 SHA with `git rev-parse HEAD` at invocation time; keep it in the QA ledger rather
 than this document. The contract test must parse all machine-readable examples,
 assert public/internal field separation, and verify the 600-second window.
+
+The stale timer checks durable `metric_data.collection_attempt_time` as well as the
+last consumed attempt before declaring collection stopped. Only the current
+configuration version and attempts between activation and the scan time qualify;
+future or preactivation records cannot suppress stale detection. This check shares
+the target row lock with A's recorder. It postpones the timer without accepting a
+synthetic metric, advancing rule/recovery clocks, or changing connection status.
+If collection also stops while Redis is down, the timer still opens the incident
+at the last durable attempt plus `staleAfterSeconds`. Candidate filtering uses the
+same basis before the batch limit so delivery backlog cannot hide other due targets.

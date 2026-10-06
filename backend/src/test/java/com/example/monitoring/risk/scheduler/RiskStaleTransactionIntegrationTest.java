@@ -71,6 +71,9 @@ class RiskStaleTransactionIntegrationTest {
     @Autowired
     private RiskStaleTransaction staleTransaction;
 
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     @BeforeEach
     void setUp() throws Exception {
         cleanup();
@@ -144,6 +147,24 @@ class RiskStaleTransactionIntegrationTest {
                 SELECT warning_candidate_since FROM risk_rule_states
                 WHERE database_config_id=? AND rule_id='CONNECTION_RATIO'
                 """, Timestamp.class, TARGET_ID).toInstant()).isEqualTo(at(4));
+    }
+
+    @Test
+    void durableCollectionDuringDeliveryOutageDefersStaleWithoutEvaluatingMetric() {
+        insertMetric(25);
+
+        assertThat(store.findStaleCandidates(at(30), 100)).isEmpty();
+        assertThat(staleTransaction.process(new StaleCandidate(TARGET_ID, at(30)), at(30)))
+                .isEqualTo(RiskStaleTransaction.Outcome.IGNORED);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM incidents", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM event_outbox", Long.class)).isZero();
+
+        List<StaleCandidate> due = store.findStaleCandidates(at(55), 100);
+        assertThat(due).containsExactly(new StaleCandidate(TARGET_ID, at(55)));
+        assertThat(staleTransaction.process(due.get(0), at(55)))
+                .isEqualTo(RiskStaleTransaction.Outcome.APPLIED);
+        assertThat(jdbc.queryForObject("SELECT opened_at FROM incidents", Timestamp.class).toInstant())
+                .isEqualTo(at(55));
     }
 
     @Test
@@ -227,29 +248,144 @@ class RiskStaleTransactionIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM event_outbox", Long.class)).isZero();
     }
 
+    @Test
+    void durableBasisRejectsOtherVersionsPreactivationAndFutureRows() {
+        insertMetric(-1);
+        long oldVersion = insertMetric(29);
+        jdbc.update("UPDATE metric_data SET config_version=2 WHERE id=?", oldVersion);
+        insertMetric(100);
+        assertThat(store.findStaleCandidates(at(30), 100))
+                .containsExactly(new StaleCandidate(TARGET_ID, at(30)));
+        insertMetric(25);
+        assertThat(store.findStaleCandidates(at(30), 100)).isEmpty();
+        assertThat(staleTransaction.process(new StaleCandidate(TARGET_ID, at(30)), at(30)))
+                .isEqualTo(RiskStaleTransaction.Outcome.IGNORED);
+        assertThat(store.findStaleCandidates(at(55), 100))
+                .containsExactly(new StaleCandidate(TARGET_ID, at(55)));
+    }
+
+    @Test
+    void failedDurableAttemptStillDefersCollectionStaleWithoutInventingRecovery() {
+        long metricId = insertMetric(25);
+        jdbc.update("UPDATE metric_data SET collection_status='CONNECTION_FAILED',last_success_at=NULL WHERE id=?", metricId);
+        insertOpenConnectionIncident(at(5));
+        String stateBefore = rowJson("monitoring_states", "database_config_id", TARGET_ID);
+        String incidentBefore = rowJson("incidents", "incident_id", INCIDENT_ID);
+        assertThat(staleTransaction.process(new StaleCandidate(TARGET_ID, at(30)), at(30)))
+                .isEqualTo(RiskStaleTransaction.Outcome.IGNORED);
+        assertThat(rowJson("monitoring_states", "database_config_id", TARGET_ID)).isEqualTo(stateBefore);
+        assertThat(rowJson("incidents", "incident_id", INCIDENT_ID)).isEqualTo(incidentBefore);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_rule_states", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM event_outbox", Long.class)).isZero();
+        StaleCandidate due = store.findStaleCandidates(at(55), 100).get(0);
+        assertThat(staleTransaction.process(due, at(55))).isEqualTo(RiskStaleTransaction.Outcome.APPLIED);
+        assertThat(jdbc.queryForObject("SELECT risk_level FROM monitoring_states WHERE database_config_id=?", String.class, TARGET_ID)).isEqualTo("FATAL");
+    }
+
+    @Test
+    void durablyFreshTargetsCannotHideDueTargetBeyondCandidateBatch() throws Exception {
+        insertMetric(25);
+        for (long id = 13; id <= 16; id++) {
+            seedTargetStateAndPolicy(id);
+            if (id < 16) {
+                insertMetric(id, 25);
+            }
+        }
+        assertThat(store.findStaleCandidates(at(30), 2))
+                .containsExactly(new StaleCandidate(16, at(30)));
+    }
+
+    @Test
+    void durableDeadlineTimerRollsBackStateIncidentAndClocksWhenOutboxFails() {
+        insertMetric(25);
+        String before = rowJson("monitoring_states", "database_config_id", TARGET_ID);
+        jdbc.execute("ALTER TABLE event_outbox ADD CONSTRAINT t16_test_reject_status CHECK (event_type <> 'MonitoringStatusChangedEvent')");
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    staleTransaction.process(new StaleCandidate(TARGET_ID, at(55)), at(56)))
+                    .isInstanceOf(RuntimeException.class);
+            assertThat(rowJson("monitoring_states", "database_config_id", TARGET_ID)).isEqualTo(before);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM incidents", Long.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_rule_states", Long.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM event_outbox", Long.class)).isZero();
+        } finally {
+            jdbc.execute("ALTER TABLE event_outbox DROP CONSTRAINT t16_test_reject_status");
+        }
+    }
+
+    @Test
+    void waitsForConcurrentCollectorTargetLockThenReadsItsCommittedMetric() throws Exception {
+        var transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        var locked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var collector = executor.submit(() -> transactions.executeWithoutResult(ignored -> {
+                store.lockTarget(TARGET_ID).orElseThrow();
+                insertMetric(25);
+                locked.countDown();
+                try {
+                    if (!release.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("collector lock was not released");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(exception);
+                }
+            }));
+            assertThat(locked.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            var timer = executor.submit(() -> staleTransaction.process(new StaleCandidate(TARGET_ID, at(30)), at(30)));
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            long waiting;
+            do {
+                waiting = jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM database_configs%'", Long.class);
+                if (waiting == 0) {
+                    Thread.sleep(20);
+                }
+            } while (waiting == 0 && System.nanoTime() < deadline);
+            assertThat(waiting).isPositive();
+            assertThat(timer.isDone()).isFalse();
+            release.countDown();
+            collector.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(timer.get(5, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(RiskStaleTransaction.Outcome.IGNORED);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM incidents", Long.class)).isZero();
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+    }
     private void seedTargetStateAndPolicy() throws Exception {
+        seedTargetStateAndPolicy(TARGET_ID);
+    }
+
+    private void seedTargetStateAndPolicy(long targetId) throws Exception {
         jdbc.update("""
                 INSERT INTO database_configs
                     (id, collection_interval_seconds, created_at, enabled, host, name, port, status,
                      config_version, deleted_at)
                 VALUES (?, 5, ?, true, '127.0.0.1', 'production', 13306, 'UNKNOWN', 1, null)
-                """, TARGET_ID, Timestamp.from(ACTIVATED_AT));
+                """, targetId, Timestamp.from(ACTIVATED_AT));
         jdbc.update("""
                 INSERT INTO monitoring_states
                     (database_config_id, config_version, state_version, enabled, deleted,
                      connection_status, data_freshness, risk_level, activation_at, updated_at)
                 VALUES (?, 1, 1, true, false, 'UNKNOWN', 'NO_DATA', null, ?, ?)
-                """, TARGET_ID, Timestamp.from(ACTIVATED_AT), Timestamp.from(ACTIVATED_AT));
+                """, targetId, Timestamp.from(ACTIVATED_AT), Timestamp.from(ACTIVATED_AT));
         jdbc.update("""
                 INSERT INTO risk_policies
                     (database_config_id, version, rules, stale_after_seconds,
                      notification_cooldown_seconds, created_at, updated_at)
                 VALUES (?, 1, CAST(? AS jsonb), 30, 300, ?, ?)
-                """, TARGET_ID, mapper.writeValueAsString(MonitoringContracts.defaultRules()),
+                """, targetId, mapper.writeValueAsString(MonitoringContracts.defaultRules()),
                 Timestamp.from(ACTIVATED_AT), Timestamp.from(ACTIVATED_AT));
     }
 
     private long insertMetric(int second) {
+        return insertMetric(TARGET_ID, second);
+    }
+
+    private long insertMetric(long targetId, int second) {
         return jdbc.queryForObject("""
                 INSERT INTO metric_data (
                     collection_status, created_at, database_config_id, timestamp,
@@ -260,7 +396,7 @@ class RiskStaleTransactionIntegrationTest {
                 """,
                 Long.class,
                 Timestamp.from(at(second)),
-                TARGET_ID,
+                targetId,
                 Timestamp.from(at(second)),
                 Timestamp.from(at(second)),
                 Timestamp.from(at(second)));

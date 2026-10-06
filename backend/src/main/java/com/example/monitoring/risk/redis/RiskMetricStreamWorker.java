@@ -24,7 +24,7 @@ public final class RiskMetricStreamWorker implements SmartLifecycle {
             LettuceConnectionFactory connectionFactory,
             RiskMetricStreamRecordHandler handler,
             ObjectMapper objectMapper,
-            @Value("${app.redis.metric-stream-key:stream:metrics}") String sourceStream,
+            @Value("${app.redis.stream-key:stream:metrics}") String sourceStream,
             @Value("${monitoring.risk.dead-letter-stream:stream:dead-letter}") String deadLetterStream,
             @Value("${monitoring.risk.reclaim-min-idle:60s}") Duration reclaimMinIdle,
             @Value("${monitoring.risk.reclaim-interval:30s}") Duration reclaimInterval
