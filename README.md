@@ -2,7 +2,7 @@
 
 MariaDB의 상태와 성능 지표를 수집하고, 실시간 대시보드·위험도 판단·장애 알림을 제공하는 프로젝트입니다.
 
-2026-09-28 기준 수집·메트릭 조회·Redis 발행·위험도 판단·수집 차단 관련 백엔드 코드가 develop에 반영되었습니다. 인증·대상 DB CRUD·STOMP·알림 등은 추가 개발·통합이 필요합니다. 이 설명은 소스 기준 진행 현황이며 실행 검증 완료를 뜻하지 않습니다.
+2026-10-06 기준 develop에 백엔드 A(수집·메트릭·outbox), B(인증·DB 관리·보안), C(상태·위험도·사건·실시간·알림) 코드가 반영되어 있습니다. C 기능은 `RISK_ENABLED`·`REALTIME_ENABLED`·`NOTIFICATIONS_ENABLED`가 기본 `false`입니다. 프론트엔드 코드는 아직 이 저장소에 없습니다. 통합 시나리오 진행 상황은 [담당별 적용·검수표](docs/integration-handoff.md)를 확인하세요.
 
 ## 폴더 구조
 
@@ -24,5 +24,7 @@ Live_DBMS_AI/
 - [백엔드 기능 요구사항](docs/backend-functional-requirements.md)
 
 ## 실행 안내
+
+**로컬에서 백엔드를 띄워 프론트를 연결하려면 [로컬 실행 가이드](docs/local-run-guide.md)를 따르세요.**
 
 백엔드 빌드 설정은 Java 17, Spring Boot 3.2.3, Gradle Wrapper 8.5입니다. PostgreSQL·Redis 및 수집 대상 MariaDB가 필요합니다. 접속 환경 변수는 [backend/.env.example](backend/.env.example), 설정 기본값은 [application.yml](backend/src/main/resources/application.yml)을 확인하세요. `.env` 자동 로딩은 별도 설정이 필요하며, 팀 공통 실행 목표는 저장·운영 규격에 정리했으며 실제 환경 구성·통합 검증은 후속 구현 작업입니다.
