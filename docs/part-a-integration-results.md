@@ -1,4 +1,4 @@
-# A 담당 통합 시나리오 결과 (T06~T11, T13, T26)
+# A 담당 통합 시나리오 결과 (T06~T11, T13, T16, T26)
 
 [integration-handoff.md](integration-handoff.md) 5절의 A 범위 시나리오를 실제 로컬 환경에서 실행한 기록이다. 실행 날짜·기준 SHA·입력·관측 결과는 증거 디렉터리의 `summary.md`와 `results.json`에 있고, 요청·응답·DB/Redis 관측값은 시나리오별 JSON으로 남긴다.
 
@@ -25,8 +25,24 @@
 ### 보류
 
 - T26 "오래된 OPEN 사건·근거 값 보존"은 C의 `incidents`(V4) 구현 후 확인한다.
-- T12·T16은 C의 소비자(`cg:risk`)·상태 판정이 있어야 해서 A 단독으로 실행하지 않았다.
+- T12는 C의 소비자(`cg:risk`) 중복·ACK 시나리오라 C 범위에서 확인한다. T16은 아래 별도 실행으로 확인했다.
 - 필수 조회 SQL 오류(`PARTIAL_FAILURE/QUERY_FAILED`)는 실제 MariaDB에서 안정적으로 만들기 어려워 단위 테스트로만 확인했다.
+
+### T16 재검증 (C PR #19, 2026-10-06)
+
+| 항목 | 값 |
+| --- | --- |
+| 실행 | 2026-10-06T11:51Z ~ 11:56Z (UTC) |
+| 기준 SHA | `5c03550` (PR #19 head, develop `f876ae8`로 병합) |
+| 환경 | docker-compose PostgreSQL 16 · Redis 7.4 · MariaDB 10.11, 로컬 백엔드(local 프로필) `RISK_ENABLED=true`, 활성 대상 2개, 수집 주기 5초 |
+
+| 경우 | 결과 | 관측 |
+| --- | --- | --- |
+| Redis 중단(수집기 정상) | PASS | Redis 65초 중단 중 PostgreSQL 메트릭 32건 계속 저장, 새 `COLLECTION_STALE` 0건. 복구 뒤 outbox 전부 발행, `cg:risk` lag 0, 상태 갱신 재개 |
+| 수집 프로세스 중단 | PASS | `APP_COLLECTOR_ENABLED=false`로 재시작하자 두 대상 모두 마지막 `collection_attempt_time` + 정확히 30.000초에 CRITICAL `COLLECTION_STALE` OPEN, `dataFreshness=STALE` |
+| 수집 재개 | PASS | 첫 SUCCESS 후 약 20초(15초 지속 조건 충족) 뒤 `RECOVERED`, `FRESH`/`INFO` 복귀 |
+
+PR #18 기준에서는 같은 Redis 중단에서 약 30초 만에 대상 전체에 잘못된 stale 사건이 열렸다(PR #18 A 리뷰). 접속 실패 지속(`CONNECTION_FAILURE`)과의 구분은 T11의 `CONNECTION_FAILED` 기록과 C 자동 테스트로 확인한다. 자동 테스트: `RiskStaleTransactionIntegrationTest`, `RiskRedisOutageNativeTest`(조건부).
 
 ## 2. 실행 중 발견·수정한 문제
 
