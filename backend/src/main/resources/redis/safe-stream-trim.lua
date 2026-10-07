@@ -1,3 +1,7 @@
+-- KEYS[1] stream
+-- ARGV[1] max deletions per call
+-- ARGV[2] hard maximum age in ms (0 disables the cap)
+-- ARGV[3..] consumer groups that must exist before the 24h safe boundary applies
 local stream = KEYS[1]
 if redis.call('EXISTS', stream) == 0 then
     return 0
@@ -21,15 +25,23 @@ local function idLess(a, b)
 end
 
 local now = redis.call('TIME')
-local cutoff = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000) - 86400000
-if cutoff <= 0 then
-    return 0
+local nowMs = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+local batch = tonumber(ARGV[1])
+local maxAgeMs = tonumber(ARGV[2])
+
+-- 1. Safe boundary: at least 24h old, read and acknowledged by every group, all required groups present.
+local blocked = false
+local safeCutoff = nowMs - 86400000
+if safeCutoff <= 0 then
+    blocked = true
+    safeCutoff = 0
 end
-local boundary = string.format('%.0f', cutoff) .. '-0'
+local boundary = string.format('%.0f', safeCutoff) .. '-0'
+local oldestPending = nil
 local present = {}
 local groups = redis.call('XINFO', 'GROUPS', stream)
 if #groups == 0 then
-    return 0
+    blocked = true
 end
 
 for _, fields in ipairs(groups) do
@@ -50,25 +62,52 @@ for _, fields in ipairs(groups) do
         boundary = delivered
     end
     local pending = redis.call('XPENDING', stream, name)
-    if pending[1] > 0 and idLess(pending[2], boundary) then
-        boundary = pending[2]
+    if pending[1] > 0 then
+        if idLess(pending[2], boundary) then
+            boundary = pending[2]
+        end
+        if oldestPending == nil or idLess(pending[2], oldestPending) then
+            oldestPending = pending[2]
+        end
     end
 end
 
-for i = 2, #ARGV do
+for i = 3, #ARGV do
     if not present[ARGV[i]] then
-        return 0
+        blocked = true
     end
 end
 
-if boundary == "0-0" then
+local target = nil
+if not blocked and boundary ~= '0-0' then
+    target = boundary
+end
+
+-- 2. Hard cap: records older than maxAgeMs go even when a group is missing, disabled or lagging,
+--    but a record still pending in any group is never deleted.
+if maxAgeMs > 0 then
+    local hardCutoff = nowMs - maxAgeMs
+    if hardCutoff > 0 then
+        local hard = string.format('%.0f', hardCutoff) .. '-0'
+        if oldestPending ~= nil and idLess(oldestPending, hard) then
+            hard = oldestPending
+        end
+        if target == nil or idLess(target, hard) then
+            target = hard
+        end
+    end
+end
+
+if target == nil or target == '0-0' then
     return 0
 end
 
 -- Bound exact deletion while retaining the boundary record itself.
-local batch = tonumber(ARGV[1])
-local candidates = redis.call('XRANGE', stream, '-', '(' .. boundary, 'COUNT', batch + 1)
-if #candidates > batch then
-    boundary = candidates[batch + 1][1]
+local candidates = redis.call('XRANGE', stream, '-', '(' .. target, 'COUNT', batch + 1)
+if #candidates == 0 then
+    return 0
 end
-return redis.call('XTRIM', stream, 'MINID', '=', boundary)
+if #candidates > batch then
+    target = candidates[batch + 1][1]
+end
+return redis.call('XTRIM', stream, 'MINID', '=', target)

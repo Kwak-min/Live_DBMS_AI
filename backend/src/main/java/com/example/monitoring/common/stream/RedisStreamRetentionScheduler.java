@@ -28,25 +28,33 @@ public final class RedisStreamRetentionScheduler {
     private static final List<String> STATUS_GROUPS = List.of("cg:realtime");
     private static final List<String> INCIDENT_GROUPS = List.of("cg:realtime", "cg:notification");
     private static final int BATCH_SIZE = 1_000;
+    private static final long MIN_MAX_AGE_HOURS = 24;
 
     private final StringRedisTemplate redis;
     private final String metricStream;
     private final String heartbeatStream;
     private final String statusStream;
     private final String incidentStream;
+    private final long maxAgeMs;
 
     public RedisStreamRetentionScheduler(
             StringRedisTemplate redis,
             @Value("${app.redis.stream-key:stream:metrics}") String metricStream,
             @Value("${app.redis.heartbeat-stream-key:stream:collector-heartbeats}") String heartbeatStream,
             @Value("${app.redis.status-stream-key:stream:statuses}") String statusStream,
-            @Value("${app.redis.incident-stream-key:stream:incidents}") String incidentStream
+            @Value("${app.redis.incident-stream-key:stream:incidents}") String incidentStream,
+            @Value("${app.redis.stream-retention.max-age-hours:168}") long maxAgeHours
     ) {
+        if (maxAgeHours != 0 && maxAgeHours < MIN_MAX_AGE_HOURS) {
+            throw new IllegalArgumentException(
+                    "app.redis.stream-retention.max-age-hours must be 0 (disabled) or at least 24");
+        }
         this.redis = redis;
         this.metricStream = metricStream;
         this.heartbeatStream = heartbeatStream;
         this.statusStream = statusStream;
         this.incidentStream = incidentStream;
+        this.maxAgeMs = maxAgeHours * 3_600_000L;
     }
 
     @Scheduled(fixedDelayString = "${app.redis.stream-retention.interval-ms:60000}",
@@ -61,6 +69,7 @@ public final class RedisStreamRetentionScheduler {
     long trim(String stream, List<String> requiredGroups) {
         List<String> arguments = new ArrayList<>();
         arguments.add(Integer.toString(BATCH_SIZE));
+        arguments.add(Long.toString(maxAgeMs));
         arguments.addAll(requiredGroups);
         Long removed = redis.execute(TRIM, List.of(stream), arguments.toArray());
         if (removed == null) {

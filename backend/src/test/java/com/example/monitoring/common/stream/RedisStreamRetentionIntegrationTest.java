@@ -54,7 +54,7 @@ class RedisStreamRetentionIntegrationTest {
         statuses = "test:retention:statuses:" + UUID.randomUUID();
         incidents = "test:retention:incidents:" + UUID.randomUUID();
         retention = new RedisStreamRetentionScheduler(new StringRedisTemplate(factory),
-                metrics, heartbeat, statuses, incidents);
+                metrics, heartbeat, statuses, incidents, 168);
         oldTime = System.currentTimeMillis() - Duration.ofHours(25).toMillis();
     }
 
@@ -162,6 +162,62 @@ class RedisStreamRetentionIntegrationTest {
         add(metrics, oldTime, 0);
         assertThat(retention.trim(metrics, GROUPS)).isZero();
         assertThat(commands.xlen(metrics)).isOne();
+    }
+
+    @Test
+    void missingGroupsStillRemoveRecordsOlderThanMaxAge() {
+        long expired = System.currentTimeMillis() - Duration.ofDays(8).toMillis();
+        add(metrics, expired, 0);
+        add(metrics, expired, 1);
+        String keptOld = add(metrics, oldTime, 0);
+        String recent = add(metrics, System.currentTimeMillis(), 0);
+
+        assertThat(retention.trim(metrics, GROUPS)).isEqualTo(2);
+        assertThat(commands.xrange(metrics, io.lettuce.core.Range.unbounded()))
+                .extracting(io.lettuce.core.StreamMessage::getId).containsExactly(keptOld, recent);
+    }
+
+    @Test
+    void laggingGroupLosesOnlyRecordsOlderThanMaxAge() {
+        long expired = System.currentTimeMillis() - Duration.ofDays(8).toMillis();
+        add(metrics, expired, 0);
+        String keptOld = add(metrics, oldTime, 0);
+        String recent = add(metrics, System.currentTimeMillis(), 0);
+        createGroup(metrics, "cg:risk");
+        acknowledgeAll(metrics, "cg:risk");
+        createGroup(metrics, "cg:realtime");
+
+        assertThat(retention.trim(metrics, GROUPS)).isOne();
+        assertThat(commands.xrange(metrics, io.lettuce.core.Range.unbounded()))
+                .extracting(io.lettuce.core.StreamMessage::getId).containsExactly(keptOld, recent);
+    }
+
+    @Test
+    void pendingRecordOlderThanMaxAgeIsNeverDeleted() {
+        long expired = System.currentTimeMillis() - Duration.ofDays(8).toMillis();
+        String acknowledged = add(metrics, expired, 0);
+        String pending = add(metrics, expired, 1);
+        add(metrics, expired, 2);
+        createGroup(metrics, "cg:risk");
+        read(metrics, "cg:risk", 2);
+        commands.xack(metrics, "cg:risk", acknowledged);
+
+        assertThat(retention.trim(metrics, GROUPS)).isOne();
+        assertThat(commands.xrange(metrics, io.lettuce.core.Range.unbounded()).get(0).getId()).isEqualTo(pending);
+        assertThat(commands.xpending(metrics, "cg:risk").getCount()).isOne();
+    }
+
+    @Test
+    void zeroMaxAgeDisablesTheCapAndInvalidValuesAreRejected() {
+        RedisStreamRetentionScheduler uncapped = new RedisStreamRetentionScheduler(new StringRedisTemplate(factory),
+                metrics, heartbeat, statuses, incidents, 0);
+        add(metrics, System.currentTimeMillis() - Duration.ofDays(30).toMillis(), 0);
+
+        assertThat(uncapped.trim(metrics, GROUPS)).isZero();
+        assertThat(commands.xlen(metrics)).isOne();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new RedisStreamRetentionScheduler(
+                new StringRedisTemplate(factory), metrics, heartbeat, statuses, incidents, 12))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
