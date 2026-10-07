@@ -16,6 +16,7 @@
 ## 1. 공통 규칙
 
 - **같은 origin.** 브라우저는 `http://localhost:5173`만 쓰고 Vite proxy로 `/api`, `/ws`를 8080에 넘긴다(`changeOrigin: false`, `/ws`는 `ws: true`). `127.0.0.1:5173`과 섞지 않는다. 운영도 단일 HTTPS origin이다.
+- **개발 서버 포트가 다르면 설정으로 맞춘다.** 프론트가 `http://localhost:3000` 등에서 돈다면 백엔드를 `PUBLIC_ORIGIN=http://localhost:3000`으로 실행하고, 그 개발 서버의 proxy로 `/api`·`/ws`를 넘긴다. 백엔드는 `PUBLIC_ORIGIN` 하나만 허용하며 CORS는 열지 않는다(여러 origin·CORS를 코드에 넣지 않는다).
 - **시각.** 모든 시각은 UTC `yyyy-MM-ddTHH:mm:ss.SSSZ` 문자열이다. 화면에서만 현지 시간으로 바꾼다. 조회 파라미터(`start`/`end`)도 같은 형식이다.
 - **ID.** 숫자 ID는 JavaScript 안전 정수 범위다. 사건 ID는 UUID 문자열이다.
 - **null은 0이 아니다.** 지표가 null이면 `unavailableMetrics`에 이유(`WARMUP`, `UNSUPPORTED`, `QUERY_FAILED` 등)가 있다. 0으로 채워 그리지 않는다. `cpuUsage`·`memoryUsage`는 v1에서 항상 null(`UNSUPPORTED`).
@@ -64,7 +65,7 @@
 
 ## 4. 실시간(STOMP)
 
-- 주소 `ws://localhost:5173/ws`(proxy 경유). CONNECT 헤더는 정확히 `accept-version:1.2`, `heart-beat:10000,10000`, `Authorization:Bearer <accessToken>`. 다른 heart-beat 값이나 query token은 거절된다.
+- 주소 `ws://localhost:5173/ws`(proxy 경유, SockJS 아님). CONNECT 헤더는 정확히 `accept-version:1.2`, `heart-beat:10000,10000`, `Authorization:Bearer <accessToken>`. `@stomp/stompjs`에서는 `connectHeaders: { Authorization: 'Bearer ' + token }`. URL에 토큰을 붙이는 방식(`/ws?token=`)은 서버·proxy 로그에 토큰이 남아 금지이며 handshake 403이다. 다른 heart-beat 값도 거절된다.
 - **클라이언트도 heart-beat를 보내야 한다.** 10초 약속을 지키지 않으면 서버가 연결을 끊는다. `@stomp/stompjs`처럼 heart-beat를 자동 처리하는 라이브러리를 쓰고 `heartbeatIncoming/Outgoing=10000`으로 맞춘다.
 - 구독 순서: `/user/queue/errors` → `/topic/databases/{id}/metrics` · `/status` · `/incidents`. 와일드카드·SEND는 금지다. 계정당 소켓 5개, 소켓당 구독 61개.
 - 메시지는 `{schemaVersion:1, eventId, eventType, databaseConfigId, publishedAt, data}`. `eventType`은 `MetricUpdated`(data=Metric), `MonitoringStatusChanged`(data=StatusSnapshot), `IncidentCreatedEvent`·`IncidentUpdatedEvent`·`IncidentResolvedEvent`(data=Incident).
