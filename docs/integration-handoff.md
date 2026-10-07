@@ -38,12 +38,14 @@
 
 ### B — 사용자·DB 관리·공통 보안
 
-- [ ] 공통 JWT/세션/Refresh 회전/CSRF/로그아웃·키 설정, REST/STOMP 공유 검증 서비스.
-- [ ] USER/ADMIN 권한, 초기 Admin 생성, 마지막 활성 Admin 보호, 사용자 역할/상태 변경 시 세션 폐기.
-- [ ] DB CRUD·configVersion 경쟁 처리·soft delete·20개 상한, 내부 TargetProvider와 C lifecycle 연결.
-- [ ] AES-256-GCM 저장·복호화 경계·키 버전/nonce·기존 평문 안전 이전.
-- [ ] 공통 예외 응답·입력 검증·X-Request-Id·요청 크기 제한·보안 로그/감사 트랜잭션.
-- [ ] IP 신뢰 proxy 규칙, outbound DB CIDR/포트 검사, 감사/접속 이력 API·V2 migration.
+- [x] 공통 JWT/세션/Refresh 회전/CSRF/로그아웃·키 설정, REST/STOMP 공유 검증 서비스.
+- [x] USER/ADMIN 권한, 초기 Admin 생성, 마지막 활성 Admin 보호, 사용자 역할/상태 변경 시 세션 폐기.
+- [x] DB CRUD·configVersion 경쟁 처리·soft delete·20개 상한, 내부 TargetProvider와 C lifecycle 연결.
+- [x] AES-256-GCM 저장·복호화 경계·키 버전/nonce·기존 평문 안전 이전.
+- [x] 공통 예외 응답·입력 검증·X-Request-Id·요청 크기 제한·보안 로그/감사 트랜잭션.
+- [x] IP 신뢰 proxy 규칙, outbound DB CIDR/포트 검사, 감사/접속 이력 API·V2 migration.
+
+검수 근거: 실제 환경 통합 시나리오 [part-b-integration-results.md](part-b-integration-results.md) (T01~T05·T27·T28), 자동 테스트 `backend/gradlew test`. DB CRUD·configVersion·lifecycle 연결은 A의 T06~T08과 C lifecycle 통합 테스트로 함께 확인했다.
 
 ### C — 정책·위험도·사건·실시간·알림
 
@@ -88,7 +90,7 @@
 
 각 항목에 실행 날짜·기준 SHA·입력·관측 결과·증거 경로를 붙인다. 아래는 기대 결과이지 이번 턴의 실행 결과가 아니다.
 
-실행 기록: A 범위(T06~T11, T13, T26)는 [part-a-integration-results.md](part-a-integration-results.md).
+실행 기록: A 범위(T06~T11, T13, T26)는 [part-a-integration-results.md](part-a-integration-results.md). B 범위(T01~T05, T27, T28)는 [part-b-integration-results.md](part-b-integration-results.md).
 
 | ID | 실행 | 기대 결과 |
 | --- | --- | --- |

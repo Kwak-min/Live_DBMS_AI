@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/auth/signup",
+    "body": {
+      "email": "t01-1007124427@example.test",
+      "password": "***",
+      "displayName": "T01 user",
+      "role": "ADMIN"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "요청 값을 확인해 주세요.",
+      "requestId": "ef270331-0d86-4862-8f09-4f563ace78eb",
+      "fieldErrors": []
+    }
+  }
+}

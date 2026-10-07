@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/auth/me",
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "SESSION_REVOKED",
+      "message": "인증 세션이 만료되었거나 폐기되었습니다.",
+      "requestId": "add76cab-edbd-4777-8b63-d756983d2508",
+      "fieldErrors": []
+    }
+  }
+}

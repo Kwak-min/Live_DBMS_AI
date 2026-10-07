@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "body": {
+      "email": "t01-1007124427@example.test",
+      "password": "***"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "code": "ORIGIN_NOT_ALLOWED",
+      "message": "허용되지 않은 요청 출처입니다.",
+      "requestId": "5f476f66-0618-458f-b75d-24008f9146a5",
+      "fieldErrors": []
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "targets": [
+    [
+      "legacy-up",
+      "2026-09-01 00:00:00",
+      "t"
+    ],
+    [
+      "legacy-blocked",
+      "2026-09-01 00:30:00",
+      "f"
+    ],
+    [
+      "legacy-disabled",
+      "2026-09-01 01:00:00",
+      "f"
+    ]
+  ],
+  "metricUtc": "2026-09-02 01:00:05",
+  "blockedUtc": "2026-09-02 23:00:00",
+  "legacyTimeZone": "Asia/Seoul"
+}

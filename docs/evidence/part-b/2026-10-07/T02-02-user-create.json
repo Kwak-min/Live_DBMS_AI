@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases",
+    "body": {
+      "name": "t02-1007124427",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "username": "monitor",
+      "password": "***",
+      "enabled": false
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "code": "FORBIDDEN",
+      "message": "접근 권한이 없습니다.",
+      "requestId": "9225b617-3a99-4261-9c8a-5f9428bd3583",
+      "fieldErrors": []
+    }
+  }
+}

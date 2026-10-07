@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "body": {
+      "email": "t01-1007124427@example.test",
+      "password": "***"
+    }
+  },
+  "response": {
+    "status": 503,
+    "body": {
+      "code": "DEPENDENCY_UNAVAILABLE",
+      "message": "인증 저장소를 사용할 수 없습니다.",
+      "requestId": "a1c7cc9c-c742-4713-a5ad-9ba697c12364",
+      "fieldErrors": []
+    }
+  }
+}

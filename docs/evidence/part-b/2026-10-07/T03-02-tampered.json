@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/auth/me",
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "INVALID_TOKEN",
+      "message": "유효하지 않은 Access token입니다.",
+      "requestId": "6a61c450-3b6e-4698-95e8-8f9281989c76",
+      "fieldErrors": []
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/auth/refresh",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "accessToken": "<redacted>",
+      "tokenType": "Bearer",
+      "expiresIn": 900,
+      "user": {
+        "id": 4,
+        "email": "t01-1007124427@example.test",
+        "displayName": "T01 user",
+        "role": "USER",
+        "enabled": true,
+        "createdAt": "2026-10-07T12:44:38.690Z",
+        "updatedAt": "2026-10-07T12:45:20.998Z"
+      }
+    }
+  }
+}

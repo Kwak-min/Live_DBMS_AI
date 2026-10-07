@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/notifications/push-subscriptions",
+    "body": {
+      "endpoint": "http://fcm.googleapis.com/fcm/send/abc"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "Please check the request values.",
+      "requestId": "1aafee86-0be4-4cd3-b053-a1bd41227a67",
+      "fieldErrors": [
+        {
+          "field": "endpoint",
+          "code": "INVALID_VALUE",
+          "message": "The Push endpoint is invalid."
+        }
+      ]
+    }
+  }
+}

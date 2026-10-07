@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/auth/me",
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "ACCESS_TOKEN_EXPIRED",
+      "message": "Access token has expired.",
+      "requestId": "6aa5c27d-f1d6-483c-9f77-43d296e0e789",
+      "fieldErrors": []
+    }
+  }
+}
