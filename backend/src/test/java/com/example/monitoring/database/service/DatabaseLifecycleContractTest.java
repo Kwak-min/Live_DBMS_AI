@@ -46,7 +46,8 @@ class DatabaseLifecycleContractTest {
 
     @BeforeEach
     void setUp() {
-        service = new DatabaseConfigService(repository, crypto, audit, addressPolicy, locks, context, port);
+        service = new DatabaseConfigService(repository, crypto, audit, addressPolicy, locks, context, port,
+                new DatabaseDisplayStatusReader(null, false));
         requestId = UUID.randomUUID();
         lenient().when(context.current()).thenReturn(new AuditRequestContext.Details(7L, "127.0.0.1", requestId));
     }

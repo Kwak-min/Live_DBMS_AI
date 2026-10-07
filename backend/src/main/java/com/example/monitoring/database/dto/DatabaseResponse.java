@@ -1,5 +1,6 @@
 package com.example.monitoring.database.dto;
 
+import com.example.monitoring.database.service.DatabaseDisplayStatusReader.DisplayStatus;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.TargetDbStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -22,9 +23,14 @@ public record DatabaseResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "UTC creation time") Instant createdAt,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "UTC last update time") Instant updatedAt
 ) {
+    /** database_configs 표시 컬럼을 그대로 쓴다(위험도 기능이 꺼진 기본 모드). */
     public static DatabaseResponse from(DatabaseConfig config) {
+        return from(config, new DisplayStatus(config.getStatus(), config.getLastCheckedAt(), config.getLastSuccessAt()));
+    }
+
+    public static DatabaseResponse from(DatabaseConfig config, DisplayStatus status) {
         return new DatabaseResponse(config.getId(), config.getName(), config.getHost(), config.getPort(),
-                config.getDatabaseName(), config.getEnabled(), config.getConfigVersion(), config.getStatus(),
-                config.getLastCheckedAt(), config.getLastSuccessAt(), config.getCreatedAt(), config.getUpdatedAt());
+                config.getDatabaseName(), config.getEnabled(), config.getConfigVersion(), status.connectionStatus(),
+                status.lastAttemptAt(), status.lastSuccessAt(), config.getCreatedAt(), config.getUpdatedAt());
     }
 }
