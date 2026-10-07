@@ -18,4 +18,15 @@ public class StompAccessTokenAuthenticator {
         }
         return StompPrincipal.from(authService.authenticate(authorization.substring(PREFIX.length())));
     }
+
+    public StompPrincipal authenticateToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "STOMP Access Token이 필요합니다.");
+        }
+        String cleanToken = token.startsWith(PREFIX) ? token.substring(PREFIX.length()).trim() : token.trim();
+        if (cleanToken.isEmpty()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "STOMP Access Token이 필요합니다.");
+        }
+        return StompPrincipal.from(authService.authenticate(cleanToken));
+    }
 }

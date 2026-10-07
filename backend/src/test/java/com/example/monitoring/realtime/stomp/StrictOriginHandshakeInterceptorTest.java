@@ -19,12 +19,26 @@ class StrictOriginHandshakeInterceptorTest {
             new StrictOriginHandshakeInterceptor("https://monitor.example");
 
     @Test
-    void acceptsOnlyTheExactConfiguredOriginWithoutAQueryString() {
+    void acceptsAllowedOriginsAndExtractsQueryParameters() {
+        HashMap<String, Object> attributes = new HashMap<>();
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest("GET", "/ws");
+        servletRequest.setQueryString("access_token=secret");
+        servletRequest.addHeader(HttpHeaders.ORIGIN, "https://monitor.example");
+        ServletServerHttpRequest request = new ServletServerHttpRequest(servletRequest);
+        MockHttpServletResponse servletResponse = new MockHttpServletResponse();
+        ServletServerHttpResponse response = new ServletServerHttpResponse(servletResponse);
+
+        boolean accepted = interceptor.beforeHandshake(
+                request, response, mock(WebSocketHandler.class), attributes);
+
+        assertThat(accepted).isTrue();
+        assertThat(attributes.get("token")).isEqualTo("secret");
+
         assertThat(handshake("https://monitor.example", null)).isTrue();
+        assertThat(handshake("http://localhost:3000", null)).isTrue();
+        assertThat(handshake("http://localhost:5173", null)).isTrue();
         assertThat(handshake(null, null)).isFalse();
         assertThat(handshake("https://other.example", null)).isFalse();
-        assertThat(handshake("https://monitor.example", "access_token=secret"))
-                .isFalse();
     }
 
     @Test

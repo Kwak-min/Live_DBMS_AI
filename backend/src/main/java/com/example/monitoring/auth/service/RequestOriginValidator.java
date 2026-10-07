@@ -7,24 +7,35 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Service
 public class RequestOriginValidator {
 
     private final String publicOrigin;
+    private final Set<String> allowedOrigins;
 
     public RequestOriginValidator(@Value("${app.auth.public-origin}") String publicOrigin) {
         this.publicOrigin = strictOrigin(publicOrigin);
+        Set<String> origins = new LinkedHashSet<>();
+        origins.add(this.publicOrigin);
+        origins.add("http://localhost:3000");
+        origins.add("http://localhost:5173");
+        origins.add("http://127.0.0.1:3000");
+        origins.add("http://127.0.0.1:5173");
+        this.allowedOrigins = Collections.unmodifiableSet(origins);
     }
 
     public void validateMutation(HttpServletRequest request) {
         String suppliedOrigin = request.getHeader("Origin");
         if (suppliedOrigin != null && !suppliedOrigin.isBlank()) {
-            if (!publicOrigin.equals(strictOrigin(suppliedOrigin))) throw notAllowed();
+            if (!isAllowedOrigin(strictOrigin(suppliedOrigin))) throw notAllowed();
             return;
         }
         String referer = request.getHeader("Referer");
-        if (referer == null || referer.isBlank() || !publicOrigin.equals(originOf(referer))) {
+        if (referer == null || referer.isBlank() || !isAllowedOrigin(originOf(referer))) {
             throw notAllowed();
         }
     }
@@ -32,7 +43,7 @@ public class RequestOriginValidator {
     public void validateCsrfBootstrap(HttpServletRequest request) {
         String origin = request.getHeader("Origin");
         if (origin != null && !origin.isBlank()) {
-            if (!publicOrigin.equals(strictOrigin(origin))) {
+            if (!isAllowedOrigin(strictOrigin(origin))) {
                 throw notAllowed();
             }
             return;
@@ -40,6 +51,10 @@ public class RequestOriginValidator {
         if ("cross-site".equalsIgnoreCase(request.getHeader("Sec-Fetch-Site"))) {
             throw notAllowed();
         }
+    }
+
+    private boolean isAllowedOrigin(String origin) {
+        return origin != null && allowedOrigins.contains(origin);
     }
 
     private String originOf(String value) {

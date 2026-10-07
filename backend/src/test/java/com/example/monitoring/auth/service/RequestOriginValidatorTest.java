@@ -23,6 +23,17 @@ class RequestOriginValidatorTest {
     }
 
     @Test
+    void acceptsLocalhost3000And127001Origins() {
+        MockHttpServletRequest req3000 = new MockHttpServletRequest();
+        req3000.addHeader("Origin", "http://localhost:3000");
+        validator.validateMutation(req3000);
+
+        MockHttpServletRequest req127 = new MockHttpServletRequest();
+        req127.addHeader("Origin", "http://127.0.0.1:5173");
+        validator.validateMutation(req127);
+    }
+
+    @Test
     void rejectsOriginHeaderContainingAPath() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Origin", "http://localhost:5173/not-an-origin");

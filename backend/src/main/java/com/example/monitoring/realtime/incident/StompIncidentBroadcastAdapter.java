@@ -22,5 +22,11 @@ public final class StompIncidentBroadcastAdapter implements IncidentBroadcastPor
         messagingTemplate.convertAndSend(
                 "/topic/databases/" + required.databaseConfigId() + "/incidents",
                 required);
+        messagingTemplate.convertAndSend(
+                "/topic/incidents/" + required.databaseConfigId(),
+                required);
+        messagingTemplate.convertAndSend(
+                "/topic/incidents",
+                required);
     }
 }

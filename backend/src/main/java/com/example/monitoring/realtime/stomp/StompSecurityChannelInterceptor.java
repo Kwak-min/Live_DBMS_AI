@@ -12,6 +12,7 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 @Component
 @ConditionalOnProperty(prefix = "monitoring.realtime", name = "enabled", havingValue = "true")
@@ -40,6 +41,7 @@ final class StompSecurityChannelInterceptor implements ChannelInterceptor {
                 case SUBSCRIBE -> subscribe(message, accessor);
                 case UNSUBSCRIBE -> unsubscribe(message, accessor);
                 case DISCONNECT -> disconnect(message, accessor);
+                case SEND -> send(message, accessor);
                 default -> throw new StompTransportException(StompFailure.of("VALIDATION_ERROR"));
             };
         } catch (StompTransportException failure) {
@@ -54,18 +56,28 @@ final class StompSecurityChannelInterceptor implements ChannelInterceptor {
 
     private Message<?> connect(Message<?> message, StompHeaderAccessor accessor) {
         String sessionId = requiredSessionId(accessor);
-        String authorization = removeAuthorization(accessor);
+        String authorization = resolveAuthorization(accessor);
         rejectHeader(accessor, "login");
         rejectHeader(accessor, "passcode");
         if (!"1.2".equals(singleHeader(accessor, "accept-version"))
                 || !"10000,10000".equals(singleHeader(accessor, "heart-beat"))) {
             throw new StompTransportException(StompFailure.of("VALIDATION_ERROR"));
         }
-        if (authorization == null) {
+        if (authorization == null || authorization.isBlank()) {
             throw new StompTransportException(StompFailure.of("AUTH_REQUIRED"));
         }
         StompPrincipal principal = sessions.connected(sessionId, authorization);
         accessor.setUser(principal);
+        return message;
+    }
+
+    private Message<?> send(Message<?> message, StompHeaderAccessor accessor) {
+        String sessionId = requiredSessionId(accessor);
+        sessions.requireCurrent(sessionId);
+        String destination = accessor.getDestination();
+        if (destination == null || !destination.startsWith("/app")) {
+            throw new StompTransportException(StompFailure.of("VALIDATION_ERROR"));
+        }
         return message;
     }
 
@@ -156,12 +168,45 @@ final class StompSecurityChannelInterceptor implements ChannelInterceptor {
         }
     }
 
-    private String removeAuthorization(StompHeaderAccessor accessor) {
-        List<String> values = accessor.getNativeHeader("Authorization");
-        accessor.removeNativeHeader("Authorization");
+    private String resolveAuthorization(StompHeaderAccessor accessor) {
+        String authHeader = removeSingleHeader(accessor, "Authorization");
+        if (authHeader != null && !authHeader.isBlank()) {
+            return authHeader.startsWith("Bearer ") ? authHeader : "Bearer " + authHeader;
+        }
+
+        String tokenHeader = removeSingleHeader(accessor, "token");
+        if (tokenHeader != null && !tokenHeader.isBlank()) {
+            return tokenHeader.startsWith("Bearer ") ? tokenHeader : "Bearer " + tokenHeader;
+        }
+
+        String accessTokenHeader = removeSingleHeader(accessor, "access_token");
+        if (accessTokenHeader != null && !accessTokenHeader.isBlank()) {
+            return accessTokenHeader.startsWith("Bearer ") ? accessTokenHeader : "Bearer " + accessTokenHeader;
+        }
+
+        Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+        if (sessionAttributes != null) {
+            Object tokenAttr = sessionAttributes.get("token");
+            if (tokenAttr == null) {
+                tokenAttr = sessionAttributes.get("access_token");
+            }
+            if (tokenAttr == null) {
+                tokenAttr = sessionAttributes.get("authorization");
+            }
+            if (tokenAttr instanceof String tokenStr && !tokenStr.isBlank()) {
+                return tokenStr.startsWith("Bearer ") ? tokenStr : "Bearer " + tokenStr;
+            }
+        }
+
+        return null;
+    }
+
+    private String removeSingleHeader(StompHeaderAccessor accessor, String name) {
+        List<String> values = accessor.getNativeHeader(name);
         if (values == null || values.isEmpty()) {
             return null;
         }
+        accessor.removeNativeHeader(name);
         if (values.size() != 1) {
             throw new StompTransportException(StompFailure.of("VALIDATION_ERROR"));
         }
