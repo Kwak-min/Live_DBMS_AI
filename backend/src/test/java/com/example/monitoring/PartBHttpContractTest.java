@@ -248,6 +248,25 @@ class PartBHttpContractTest {
         }
     }
 
+    @Test
+    void crossOriginRequestsGetNoCorsGrantEvenForLocalDevelopmentPorts() throws Exception {
+        // 운영은 단일 origin이고 로컬은 Vite proxy로 같은 origin을 쓴다(integration-security.md 3·4절).
+        // 개발용 포트라도 credential CORS를 열면 Origin 기반 CSRF 방어가 넓어진다.
+        for (String origin : new String[]{"http://localhost:3000", "http://127.0.0.1:5173", "https://evil.example"}) {
+            HttpRequest preflight = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/v1/databases"))
+                    .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                    .header("Origin", origin)
+                    .header("Access-Control-Request-Method", "GET")
+                    .header("Access-Control-Request-Headers", "authorization")
+                    .build();
+            HttpResponse<String> response = HttpClient.newHttpClient()
+                    .send(preflight, HttpResponse.BodyHandlers.ofString());
+
+            assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).as(origin).isEmpty();
+            assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).as(origin).isEmpty();
+        }
+    }
+
     private HttpResponse<String> get(String path) throws Exception {
         return get(path, null);
     }

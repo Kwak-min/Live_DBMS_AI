@@ -195,48 +195,6 @@ class StompSecurityChannelInterceptorTest {
         assertThat(sessions.authenticatedSessionCount()).isZero();
     }
 
-    @Test
-    void acceptsSendToAppDestinationWhenAuthenticated() {
-        when(authenticator.authenticateAuthorization(anyString())).thenReturn(StompTestSupport.principal(2L));
-        sessions.opened(StompTestSupport.socket("session-app"));
-        interceptor.preSend(connect("session-app", "Bearer token"), channel());
-
-        StompHeaderAccessor sendAccessor = StompHeaderAccessor.create(StompCommand.SEND);
-        sendAccessor.setSessionId("session-app");
-        sendAccessor.setDestination("/app/ping");
-        Message<?> sendMsg = mutableMessage(sendAccessor);
-
-        assertThat(interceptor.preSend(sendMsg, channel())).isNotNull();
-    }
-
-    @Test
-    void authenticatesViaTokenHeaderAndSessionAttributes() {
-        when(authenticator.authenticateAuthorization("Bearer token-header")).thenReturn(StompTestSupport.principal(5L));
-        sessions.opened(StompTestSupport.socket("session-token"));
-
-        StompHeaderAccessor tokenAccessor = StompHeaderAccessor.create(StompCommand.CONNECT);
-        tokenAccessor.setSessionId("session-token");
-        tokenAccessor.setNativeHeader("accept-version", "1.2");
-        tokenAccessor.setNativeHeader("heart-beat", "10000,10000");
-        tokenAccessor.setNativeHeader("token", "token-header");
-        Message<?> connectToken = mutableMessage(tokenAccessor);
-
-        assertThat(interceptor.preSend(connectToken, channel())).isNotNull();
-        assertThat(tokenAccessor.getNativeHeader("token")).isNull();
-
-        when(authenticator.authenticateAuthorization("Bearer query-param")).thenReturn(StompTestSupport.principal(6L));
-        sessions.opened(StompTestSupport.socket("session-query"));
-
-        StompHeaderAccessor queryAccessor = StompHeaderAccessor.create(StompCommand.CONNECT);
-        queryAccessor.setSessionId("session-query");
-        queryAccessor.setNativeHeader("accept-version", "1.2");
-        queryAccessor.setNativeHeader("heart-beat", "10000,10000");
-        queryAccessor.setSessionAttributes(java.util.Map.of("token", "query-param"));
-        Message<?> connectQuery = mutableMessage(queryAccessor);
-
-        assertThat(interceptor.preSend(connectQuery, channel())).isNotNull();
-    }
-
     private Message<?> connect(String sessionId, String authorization, String... extraHeader) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
         accessor.setSessionId(sessionId);

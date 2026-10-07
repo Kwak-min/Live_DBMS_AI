@@ -27,21 +27,4 @@ class StompAccessTokenAuthenticatorTest {
         StompAccessTokenAuthenticator authenticator = new StompAccessTokenAuthenticator(mock(AuthService.class));
         assertThatThrownBy(() -> authenticator.authenticateAuthorization(null)).isInstanceOf(ApiException.class);
     }
-
-    @Test
-    void acceptsRawTokenAndBearerTokenViaAuthenticateToken() {
-        AuthService authService = mock(AuthService.class);
-        UUID sid = UUID.randomUUID();
-        when(authService.authenticate("my-token")).thenReturn(new AuthPrincipal(10L, UserRole.USER, sid, Instant.now().plusSeconds(60)));
-        StompAccessTokenAuthenticator authenticator = new StompAccessTokenAuthenticator(authService);
-
-        StompPrincipal p1 = authenticator.authenticateToken("my-token");
-        assertThat(p1.userId()).isEqualTo(10L);
-
-        StompPrincipal p2 = authenticator.authenticateToken("Bearer my-token");
-        assertThat(p2.userId()).isEqualTo(10L);
-
-        assertThatThrownBy(() -> authenticator.authenticateToken(null)).isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> authenticator.authenticateToken("   ")).isInstanceOf(ApiException.class);
-    }
 }

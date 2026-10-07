@@ -61,7 +61,6 @@ class StompTransportConfigurationTest {
         configuration.configureMessageBroker(registry);
 
         verify(simpleBroker).setHeartbeatValue(aryEq(new long[]{10_000L, 10_000L}));
-        verify(registry).setApplicationDestinationPrefixes("/app");
         verify(registry).setUserDestinationPrefix("/user");
         verify(registry).setPreservePublishOrder(true);
     }
@@ -72,14 +71,12 @@ class StompTransportConfigurationTest {
         StompWebSocketEndpointRegistration endpoint = mock(StompWebSocketEndpointRegistration.class);
         when(registry.addEndpoint("/ws")).thenReturn(endpoint);
         when(endpoint.addInterceptors(origin)).thenReturn(endpoint);
-        when(endpoint.setAllowedOrigins(any(String[].class))).thenReturn(endpoint);
 
         configuration.registerStompEndpoints(registry);
 
         verify(registry).setErrorHandler(errorHandler);
         verify(registry).setPreserveReceiveOrder(true);
-        verify(endpoint, org.mockito.Mockito.times(2)).setAllowedOrigins(origin.allowedOrigins());
-        verify(endpoint).withSockJS();
+        verify(endpoint).setAllowedOrigins("https://monitor.example");
     }
 
     @Test

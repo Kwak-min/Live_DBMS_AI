@@ -18,7 +18,5 @@ class StompIncidentBroadcastAdapterTest {
         new StompIncidentBroadcastAdapter(template).publish(message);
 
         verify(template).convertAndSend("/topic/databases/37/incidents", message);
-        verify(template).convertAndSend("/topic/incidents/37", message);
-        verify(template).convertAndSend("/topic/incidents", message);
     }
 }

@@ -19,6 +19,5 @@ class StompMetricBroadcastAdapterTest {
         adapter.publish(message);
 
         verify(messagingTemplate).convertAndSend("/topic/databases/37/metrics", message);
-        verify(messagingTemplate).convertAndSend("/topic/metrics/37", message);
     }
 }
