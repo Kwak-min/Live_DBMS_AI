@@ -1,5 +1,7 @@
 # 로컬 실행 가이드 (프론트 연동용)
 
+화면별 API 호출 순서는 [프론트 연동 가이드](frontend-integration-guide.md)에 있다.
+
 백엔드를 내 PC에서 띄워 프론트(Vite, `http://localhost:5173`)를 실제 서버에 붙여 보기 위한 순서다. Windows PowerShell 기준이며 저장소 루트에서 실행한다. 설정의 근거와 운영 환경 값은 [integration-operations.md](integration-operations.md) 1절, 인증·쿠키 세부는 [backend/README.md](../backend/README.md)를 따른다.
 
 ## 0. 준비물

@@ -172,6 +172,11 @@ class Stomp:
         masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
         self.sock.sendall(bytes(header) + mask + masked)
 
+    def send_heartbeat(self):
+        """STOMP heart-beat(개행 1바이트)를 마스킹한 텍스트 프레임으로 보낸다."""
+        mask = os.urandom(4)
+        self.sock.sendall(bytes([0x81, 0x80 | 1]) + mask + bytes([0x0A ^ mask[0]]))
+
     def read(self, timeout):
         """다음 STOMP 프레임 명령(CONNECTED/ERROR/MESSAGE) 또는 'CLOSED'/'TIMEOUT'."""
         self.sock.settimeout(timeout)

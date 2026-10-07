@@ -1,0 +1,206 @@
+[
+  {
+    "screen": "로그인",
+    "step": "csrf → login 200, TokenResponse",
+    "ok": true,
+    "observed": "role=ADMIN"
+  },
+  {
+    "screen": "로그인",
+    "step": "GET /auth/me",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "POST /databases 201 (응답에 계정 없음)",
+    "ok": true,
+    "observed": "201"
+  },
+  {
+    "screen": "대시보드",
+    "step": "STOMP CONNECT",
+    "ok": true,
+    "observed": ""
+  },
+  {
+    "screen": "대시보드",
+    "step": "STOMP metrics 프레임 수신(MetricUpdated)",
+    "ok": true,
+    "observed": "10 frames ['metrics', 'status']"
+  },
+  {
+    "screen": "대시보드",
+    "step": "STOMP status 프레임 수신",
+    "ok": true,
+    "observed": "['metrics', 'status']"
+  },
+  {
+    "screen": "대시보드",
+    "step": "metric 프레임 형식(schemaVersion·eventId·eventType·data)",
+    "ok": true,
+    "observed": "MetricUpdated"
+  },
+  {
+    "screen": "대시보드",
+    "step": "GET /metrics/{id}/latest 200",
+    "ok": true,
+    "observed": "200 SUCCESS"
+  },
+  {
+    "screen": "대시보드",
+    "step": "GET /metrics/{id}/recent 200 (최신순)",
+    "ok": true,
+    "observed": "200 n=7"
+  },
+  {
+    "screen": "대시보드",
+    "step": "GET /metrics/{id}/history 200 (오래된 순)",
+    "ok": true,
+    "observed": "200 n=7"
+  },
+  {
+    "screen": "대시보드",
+    "step": "GET /databases/{id}/status 200 FRESH·UP",
+    "ok": true,
+    "observed": "200 ('UP', 'FRESH', 'INFO')"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "GET /databases 목록 상태 = /status 상태(monitoring_states)",
+    "ok": true,
+    "observed": "list=('UP', '2026-10-07T12:55:44.420Z') status=('UP', '2026-10-07T12:55:39.417Z')"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "GET /databases/{id} 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "POST /databases/{id}/ping 200 UP",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "사건",
+    "step": "GET /incidents 200 페이지",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "정책",
+    "step": "GET /databases/{id}/risk-policy 200 (기본 2규칙)",
+    "ok": true,
+    "observed": "200 v1"
+  },
+  {
+    "screen": "정책",
+    "step": "PUT /databases/{id}/risk-policy 200 (version+1)",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "정책",
+    "step": "같은 version 재전송 409 POLICY_VERSION_CONFLICT",
+    "ok": true,
+    "observed": "409"
+  },
+  {
+    "screen": "알림",
+    "step": "GET /notifications/push-config (VAPID 설정 시 200, 없으면 503)",
+    "ok": true,
+    "observed": "503"
+  },
+  {
+    "screen": "알림",
+    "step": "GET /notifications/push-subscriptions 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "알림",
+    "step": "GET /notifications/webhooks 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "알림",
+    "step": "GET /notifications/deliveries 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "관리자",
+    "step": "GET /users 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "관리자",
+    "step": "GET /audit-logs 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "관리자",
+    "step": "GET /access-logs 200",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "AI",
+    "step": "GET /ai/status 200",
+    "ok": true,
+    "observed": "200 available=True"
+  },
+  {
+    "screen": "AI",
+    "step": "GET /ai/reports 200 페이지",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "PATCH enabled=false 200 (configVersion+1)",
+    "ok": true,
+    "observed": "200"
+  },
+  {
+    "screen": "대시보드",
+    "step": "일시 중지 후 status 프레임 PAUSED",
+    "ok": true,
+    "observed": "10 status frames"
+  },
+  {
+    "screen": "대시보드",
+    "step": "GET /status PAUSED·riskLevel null",
+    "ok": true,
+    "observed": "PAUSED"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "옛 configVersion으로 PATCH 409 CONFIG_VERSION_CONFLICT",
+    "ok": true,
+    "observed": "409"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "DELETE /databases/{id} 204",
+    "ok": true,
+    "observed": "204"
+  },
+  {
+    "screen": "DB 관리",
+    "step": "삭제 후 /status 404",
+    "ok": true,
+    "observed": "404"
+  },
+  {
+    "screen": "로그인",
+    "step": "POST /auth/logout 204",
+    "ok": true,
+    "observed": "204"
+  }
+]

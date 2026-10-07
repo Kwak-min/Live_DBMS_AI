@@ -1,0 +1,585 @@
+[
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "d2c05c87-0e09-48d3-aab4-4422a1861e8e",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:39.432Z",
+      "data": {
+        "id": 35,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:55:39.417Z",
+        "collectionAttemptTime": "2026-10-07T12:55:39.417Z",
+        "lastSuccessAt": "2026-10-07T12:55:39.417Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.8,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 5.0,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 4,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "a112aeb8-c16f-47ed-ac28-9e1fe11d7f63",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:39.669Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:55:39.417Z",
+        "lastSuccessAt": "2026-10-07T12:55:39.417Z",
+        "latestMetricId": 35,
+        "openIncidentIds": [],
+        "stateVersion": 8,
+        "updatedAt": "2026-10-07T12:55:39.417Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "9fa23a9e-c510-4aee-8977-1bff41cc509e",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:44.452Z",
+      "data": {
+        "id": 36,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:55:44.420Z",
+        "collectionAttemptTime": "2026-10-07T12:55:44.420Z",
+        "lastSuccessAt": "2026-10-07T12:55:44.420Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.796,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 5.011,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 9,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "61002ebc-c031-4f22-b185-97d2e16d3db9",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:44.738Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:55:44.420Z",
+        "lastSuccessAt": "2026-10-07T12:55:44.420Z",
+        "latestMetricId": 36,
+        "openIncidentIds": [],
+        "stateVersion": 9,
+        "updatedAt": "2026-10-07T12:55:44.420Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "18c953cb-0739-47f2-a394-2aadf81e93d6",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:49.432Z",
+      "data": {
+        "id": 37,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:55:49.418Z",
+        "collectionAttemptTime": "2026-10-07T12:55:49.418Z",
+        "lastSuccessAt": "2026-10-07T12:55:49.418Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.804,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 4.989,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 3,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "ed1b54aa-6a17-4b2e-86aa-f798ffd08095",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:49.996Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:55:49.418Z",
+        "lastSuccessAt": "2026-10-07T12:55:49.418Z",
+        "latestMetricId": 37,
+        "openIncidentIds": [],
+        "stateVersion": 10,
+        "updatedAt": "2026-10-07T12:55:49.418Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "b2127f3e-5a03-4dba-8084-40c0dd1d7ba5",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:54.430Z",
+      "data": {
+        "id": 38,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:55:54.407Z",
+        "collectionAttemptTime": "2026-10-07T12:55:54.407Z",
+        "lastSuccessAt": "2026-10-07T12:55:54.407Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 2.603,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 4.995,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 5,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "7c9f58b5-1b84-46e5-bd5a-8a377a0c3ddf",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:55.059Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:55:54.407Z",
+        "lastSuccessAt": "2026-10-07T12:55:54.407Z",
+        "latestMetricId": 38,
+        "openIncidentIds": [],
+        "stateVersion": 11,
+        "updatedAt": "2026-10-07T12:55:54.407Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "d63e728e-ca24-4d9b-a2f5-b47769518840",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:57.015Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": null,
+        "lastAttemptAt": "2026-10-07T12:55:54.407Z",
+        "lastSuccessAt": "2026-10-07T12:55:54.407Z",
+        "latestMetricId": 38,
+        "openIncidentIds": [],
+        "stateVersion": 12,
+        "updatedAt": "2026-10-07T12:55:57.012Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "ce855cd7-51c8-4a21-a3d0-359b0e288a5c",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:55:59.431Z",
+      "data": {
+        "id": 39,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:55:59.415Z",
+        "collectionAttemptTime": "2026-10-07T12:55:59.415Z",
+        "lastSuccessAt": "2026-10-07T12:55:59.415Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.799,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 5.003,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 4,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "cbb59875-7e62-4475-b2d0-01c1fcec0bfd",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:00.157Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:55:59.415Z",
+        "lastSuccessAt": "2026-10-07T12:55:59.415Z",
+        "latestMetricId": 39,
+        "openIncidentIds": [],
+        "stateVersion": 13,
+        "updatedAt": "2026-10-07T12:55:59.415Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "2c60a9e0-b79d-42f6-a2cf-940f30250d9f",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:04.438Z",
+      "data": {
+        "id": 40,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:56:04.413Z",
+        "collectionAttemptTime": "2026-10-07T12:56:04.413Z",
+        "lastSuccessAt": "2026-10-07T12:56:04.413Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.797,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 5.009,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 12,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "1cc1fbe9-180c-4d45-b150-410ffe240652",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:05.270Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:56:04.413Z",
+        "lastSuccessAt": "2026-10-07T12:56:04.413Z",
+        "latestMetricId": 40,
+        "openIncidentIds": [],
+        "stateVersion": 14,
+        "updatedAt": "2026-10-07T12:56:04.413Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "637b9306-5ea5-4500-8efc-4a83ed70198f",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:09.419Z",
+      "data": {
+        "id": 41,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:56:09.404Z",
+        "collectionAttemptTime": "2026-10-07T12:56:09.404Z",
+        "lastSuccessAt": "2026-10-07T12:56:09.404Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.807,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 4.981,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 4,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "a0f5dfdc-dd03-4b91-8a4d-e912c127d3e4",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:10.411Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:56:09.404Z",
+        "lastSuccessAt": "2026-10-07T12:56:09.404Z",
+        "latestMetricId": 41,
+        "openIncidentIds": [],
+        "stateVersion": 15,
+        "updatedAt": "2026-10-07T12:56:09.404Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "4fc21b2f-5838-48ec-8f98-28505aa82bbf",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:14.422Z",
+      "data": {
+        "id": 42,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:56:14.405Z",
+        "collectionAttemptTime": "2026-10-07T12:56:14.405Z",
+        "lastSuccessAt": "2026-10-07T12:56:14.405Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.799,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 5.003,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 5,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "6e09f4e3-141b-4193-b2c0-f92850db191d",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:14.460Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "deleted": false,
+        "enabled": true,
+        "connectionStatus": "UP",
+        "dataFreshness": "FRESH",
+        "riskLevel": "INFO",
+        "lastAttemptAt": "2026-10-07T12:56:14.405Z",
+        "lastSuccessAt": "2026-10-07T12:56:14.405Z",
+        "latestMetricId": 42,
+        "openIncidentIds": [],
+        "stateVersion": 16,
+        "updatedAt": "2026-10-07T12:56:14.405Z"
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/metrics",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "2e264806-7cc4-4076-942b-02d4b010c9e0",
+      "eventType": "MetricUpdated",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:19.437Z",
+      "data": {
+        "id": 43,
+        "databaseConfigId": 9,
+        "configVersion": 1,
+        "timestamp": "2026-10-07T12:56:19.419Z",
+        "collectionAttemptTime": "2026-10-07T12:56:19.419Z",
+        "lastSuccessAt": "2026-10-07T12:56:19.419Z",
+        "cpuUsage": null,
+        "memoryUsage": null,
+        "activeConnections": 1,
+        "maxConnections": 151,
+        "qps": 1.795,
+        "slowQueries": 0,
+        "slowQueriesDelta": 0,
+        "slowQueriesPerSecond": 0.0,
+        "metricWindowSeconds": 5.014,
+        "threadsRunning": 1,
+        "storageBytes": 229376,
+        "responseTimeMs": 5,
+        "collectionStatus": "SUCCESS",
+        "errorCode": null,
+        "errorMessage": null,
+        "unavailableMetrics": {
+          "cpuUsage": "UNSUPPORTED",
+          "memoryUsage": "UNSUPPORTED"
+        }
+      }
+    }
+  },
+  {
+    "destination": "/topic/databases/9/status",
+    "body": {
+      "schemaVersion": 1,
+      "eventId": "f0142faf-3053-4a19-88da-b03ff2f3685f",
+      "eventType": "MonitoringStatusChanged",
+      "databaseConfigId": 9,
+      "publishedAt": "2026-10-07T12:56:20.436Z",
+      "data": {
+        "databaseConfigId": 9,
+        "configVersion": 2,
+        "deleted": false,
+        "enabled": false,
+        "connectionStatus": "UNKNOWN",
+        "dataFreshness": "PAUSED",
+        "riskLevel": null,
+        "lastAttemptAt": null,
+        "lastSuccessAt": null,
+        "latestMetricId": null,
+        "openIncidentIds": [],
+        "stateVersion": 18,
+        "updatedAt": "2026-10-07T12:56:20.432Z"
+      }
+    }
+  }
+]
