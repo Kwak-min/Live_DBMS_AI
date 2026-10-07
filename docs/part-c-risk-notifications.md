@@ -90,3 +90,13 @@ synthetic metric, advancing rule/recovery clocks, or changing connection status.
 If collection also stops while Redis is down, the timer still opens the incident
 at the last durable attempt plus `staleAfterSeconds`. Candidate filtering uses the
 same basis before the batch limit so delivery backlog cannot hide other due targets.
+
+## Stream retention and final integration
+
+The servlet application now schedules atomic, bounded retention of metrics,
+collector heartbeats, statuses, and incidents. It retains at least 24 hours,
+all groups' pending/unread boundaries, and streams whose mandatory consumers
+are absent. It neither changes consumer activation flags nor trims the DLQ.
+Configuration, expected groups, verification commands, and the remaining
+provider/frontend/state-display coordination steps are in
+[Part C completion handoff](part-c-completion.md).

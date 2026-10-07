@@ -73,3 +73,14 @@ registration, same-origin incident navigation, and browser/device acceptance.
 The backend provides the public DTO/STOMP/Push contracts and local provider
 fixtures only. This repository does not claim shared deployment, exactly-once
 provider delivery, or real mobile/provider acceptance.
+
+### Redis stream retention
+
+The servlet backend runs safe stream retention every 60 seconds by default.
+It preserves at least 24 hours plus every consumer group's pending/unread
+boundary. Streams with missing mandatory groups are retained, including when
+risk/realtime/notification consumers have not been enabled. Each cycle removes
+at most 1,000 records per stream; a dependency error is retried on the next cycle.
+Set `APP_REDIS_STREAM_RETENTION_ENABLED=false` to disable it, or
+`APP_REDIS_STREAM_RETENTION_INTERVAL_MS` to change the interval.
+See [Part C completion and final integration](../docs/part-c-completion.md).
