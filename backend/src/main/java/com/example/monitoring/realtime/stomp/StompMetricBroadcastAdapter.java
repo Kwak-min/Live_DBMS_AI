@@ -22,5 +22,7 @@ final class StompMetricBroadcastAdapter implements MetricBroadcastPort {
         RealtimeMetricMessage required = Objects.requireNonNull(message, "message");
         messagingTemplate.convertAndSend(
                 "/topic/databases/" + required.databaseConfigId() + "/metrics", required);
+        messagingTemplate.convertAndSend(
+                "/topic/metrics/" + required.databaseConfigId(), required);
     }
 }

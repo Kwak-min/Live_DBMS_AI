@@ -57,6 +57,7 @@ class StompTransportConfiguration implements WebSocketMessageBrokerConfigurer {
         registry.enableSimpleBroker("/topic", "/queue")
                 .setTaskScheduler(scheduler)
                 .setHeartbeatValue(HEARTBEAT.clone());
+        registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
         registry.setPreservePublishOrder(true);
     }
@@ -67,7 +68,11 @@ class StompTransportConfiguration implements WebSocketMessageBrokerConfigurer {
         registry.setPreserveReceiveOrder(true);
         registry.addEndpoint("/ws")
                 .addInterceptors(originInterceptor)
-                .setAllowedOrigins(originInterceptor.publicOrigin());
+                .setAllowedOrigins(originInterceptor.allowedOrigins());
+        registry.addEndpoint("/ws")
+                .addInterceptors(originInterceptor)
+                .setAllowedOrigins(originInterceptor.allowedOrigins())
+                .withSockJS();
     }
 
     @Override
