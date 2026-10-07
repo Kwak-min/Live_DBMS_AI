@@ -88,8 +88,11 @@ monitoring:
     provider: ${AI_PROVIDER:gemini}
     gemini-api-key: '${GEMINI_API_KEY:}'
     api-key: '${ANTHROPIC_API_KEY:}'
-    # 비우면 제공자 기본 모델(gemini-3.8-flash / claude-opus-5-5)
+    # 비우면 제공자 기본 모델(gemini-3.6-flash / claude-opus-5-5)
     model: '${AI_MODEL:}'
+    # Gemini만: 기본 모델이 혼잡(503)·한도 초과(429)·응답 없음·단종이면 차례로 시도. 비우면 gemini-3.5-flash,gemini-3.5-flash-lite
+    fallback-models: '${AI_FALLBACK_MODELS:}'
+    request-timeout-seconds: ${AI_REQUEST_TIMEOUT_SECONDS:0}
     effort: ${AI_EFFORT:medium}
     max-output-tokens: 16000
     refusal-fallback: ${AI_REFUSAL_FALLBACK:true}

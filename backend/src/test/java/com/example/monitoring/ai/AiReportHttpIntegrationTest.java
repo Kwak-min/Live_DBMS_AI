@@ -144,7 +144,7 @@ class AiReportHttpIntegrationTest {
         ValueOperations<String, String> values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
         when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
-        when(aiClient.model()).thenReturn("gemini-3.8-flash");
+        when(aiClient.model()).thenReturn("gemini-3.6-flash");
 
         adminToken = token(UserRole.ADMIN);
         userToken = token(UserRole.USER);
@@ -157,7 +157,7 @@ class AiReportHttpIntegrationTest {
         JsonNode status = json(send("GET", "/api/v1/ai/status", userToken), 200);
         assertThat(status.path("available").asBoolean()).isTrue();
         assertThat(status.path("provider").asText()).isEqualTo("gemini");
-        assertThat(status.path("model").asText()).isEqualTo("gemini-3.8-flash");
+        assertThat(status.path("model").asText()).isEqualTo("gemini-3.6-flash");
         assertThat(status.path("timeZone").asText()).isEqualTo("UTC");
         assertThat(status.path("dailyReportScheduled").asBoolean()).isFalse();
         assertThat(send("GET", "/api/v1/ai/status", null).statusCode()).isEqualTo(401);
@@ -175,7 +175,7 @@ class AiReportHttpIntegrationTest {
                 .thenReturn(new AiInsightClient.Result<>(new DailyReportInsight(
                         "어제는 01시에 연결 사용률이 90%까지 올랐습니다.", OverallHealth.WARNING, 72,
                         List.of(new AiFinding(InsightSeverity.WARNING, "연결 사용률 급증", "01시 90%")),
-                        List.of("max_connections 여유를 확인하세요.")), 1_234, 321));
+                        List.of("max_connections 여유를 확인하세요.")), 1_234, 321, "gemini-3.5-flash"));
 
         JsonNode pending = json(send("POST", "/api/v1/databases/" + targetId + "/ai/daily-report", adminToken), 202);
         assertThat(pending.path("status").asText()).isEqualTo("PENDING");
@@ -185,6 +185,7 @@ class AiReportHttpIntegrationTest {
         JsonNode done = await(pending.path("id").asLong(), userToken);
         assertThat(done.path("status").asText()).isEqualTo("SUCCEEDED");
         assertThat(done.path("inputTokens").asLong()).isEqualTo(1_234);
+        assertThat(done.path("model").asText()).isEqualTo("gemini-3.5-flash");
         JsonNode report = done.path("dailyReport");
         assertThat(report.path("healthScore").asInt()).isEqualTo(72);
         assertThat(report.path("overallStatus").asText()).isEqualTo("WARNING");

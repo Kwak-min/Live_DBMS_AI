@@ -18,6 +18,8 @@ import java.util.List;
 /**
  * 대상 MariaDB에서 무거운 쿼리 표본을 읽는다. performance_schema가 켜져 있고 읽을 수 있으면 누적 digest 통계를,
  * 아니면 지금 실행 중인 PROCESSLIST 문장을 쓴다. 어느 쪽이든 문장은 {@link SqlLiteralRedactor}를 거친다.
+ * 계정 관리·DDL(GRANT·FLUSH·CREATE·ALTER·DROP 등)과 information_schema·performance_schema 조회(모니터링 자체
+ * 포함)는 표본에서 뺀다.
  * 읽기 전용 조회만 실행하며 대상 DB 설정·통계를 바꾸지 않는다.
  */
 @Slf4j
@@ -41,6 +43,16 @@ public class TargetQuerySampler {
               AND DIGEST_TEXT NOT LIKE 'SET %'
               AND DIGEST_TEXT NOT LIKE 'COMMIT%'
               AND DIGEST_TEXT NOT LIKE 'ROLLBACK%'
+              AND DIGEST_TEXT NOT LIKE 'GRANT %'
+              AND DIGEST_TEXT NOT LIKE 'REVOKE %'
+              AND DIGEST_TEXT NOT LIKE 'FLUSH %'
+              AND DIGEST_TEXT NOT LIKE 'CREATE %'
+              AND DIGEST_TEXT NOT LIKE 'DROP %'
+              AND DIGEST_TEXT NOT LIKE 'ALTER %'
+              AND DIGEST_TEXT NOT LIKE 'TRUNCATE %'
+              AND DIGEST_TEXT NOT LIKE 'RENAME %'
+              AND DIGEST_TEXT NOT LIKE '%information_schema%'
+              AND DIGEST_TEXT NOT LIKE '%performance_schema%'
             ORDER BY SUM_TIMER_WAIT DESC
             LIMIT ?
             """;
@@ -50,6 +62,8 @@ public class TargetQuerySampler {
             FROM information_schema.PROCESSLIST
             WHERE COMMAND NOT IN ('Sleep', 'Daemon', 'Binlog Dump')
               AND INFO IS NOT NULL
+              AND INFO NOT LIKE '%information_schema%'
+              AND INFO NOT LIKE '%performance_schema%'
               AND ID <> CONNECTION_ID()
             ORDER BY TIME DESC
             LIMIT ?

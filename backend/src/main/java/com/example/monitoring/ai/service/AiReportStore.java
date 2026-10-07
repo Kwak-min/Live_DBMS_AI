@@ -66,12 +66,14 @@ public class AiReportStore {
         return ((Number) keys.getKeys().get("id")).longValue();
     }
 
-    public void complete(long id, String contentJson, long inputTokens, long outputTokens, Instant completedAt) {
+    /** @param model 실제로 생성한 모델. null이면 요청 시 기록한 값을 유지한다. */
+    public void complete(long id, String contentJson, long inputTokens, long outputTokens, String model,
+                         Instant completedAt) {
         jdbc.update("""
                 UPDATE ai_reports SET status = 'SUCCEEDED', content = CAST(? AS jsonb), input_tokens = ?,
-                    output_tokens = ?, completed_at = ?
+                    output_tokens = ?, model = COALESCE(?, model), completed_at = ?
                 WHERE id = ? AND status = 'PENDING'
-                """, contentJson, inputTokens, outputTokens, utc(completedAt), id);
+                """, contentJson, inputTokens, outputTokens, model, utc(completedAt), id);
     }
 
     public void fail(long id, String errorCode, String errorMessage, Instant completedAt) {

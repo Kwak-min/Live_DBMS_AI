@@ -253,7 +253,7 @@ public class AiReportService {
             DailyReport report = new DailyReport(reportDate, properties.zone().getId(), insight.summary(),
                     insight.overallStatus(), Math.max(0, Math.min(100, insight.healthScore())),
                     nonNull(insight.findings()), nonNull(insight.recommendations()), stats, previousOrNull);
-            store.complete(reportId, json(report), result.inputTokens(), result.outputTokens(), now());
+            store.complete(reportId, json(report), result.inputTokens(), result.outputTokens(), result.model(), now());
         });
     }
 
@@ -286,13 +286,14 @@ public class AiReportService {
                         QueryRiskLevel.LOW, List.of(),
                         List.of("누적 쿼리 통계를 보려면 대상 MariaDB에서 performance_schema=ON으로 재시작하고 "
                                 + "모니터링 계정에 performance_schema SELECT 권한을 주세요."));
-                store.complete(reportId, json(empty), 0, 0, now());
+                store.complete(reportId, json(empty), 0, 0, null, now());
                 return;
             }
             AiInsightClient.Result<QueryAnalysisInsight> result =
                     aiClient.queryAnalysis(metadata.name(), samples.source(), samples.samples());
             QueryAnalysis analysis = merge(samples, collectedAt, result.value());
-            store.complete(reportId, json(analysis), result.inputTokens(), result.outputTokens(), now());
+            store.complete(reportId, json(analysis), result.inputTokens(), result.outputTokens(), result.model(),
+                    now());
         });
     }
 
