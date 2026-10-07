@@ -96,6 +96,66 @@ class WebPushRequestPreparerCryptoTest {
                 "mailto:ops@example.com");
     }
 
+    @Test
+    void chromeFcmSubscriptionIsSentToTheVapidPathAndStillDecrypts() throws Exception {
+        KeyPair recipient = ecKeyPair();
+        byte[] recipientPublic = ((ECPublicKey) recipient.getPublic()).getQ().getEncoded(false);
+        byte[] authSecret = new byte[16];
+        Arrays.fill(authSecret, (byte) 0x33);
+        byte[] vapidPublic = org.bouncycastle.crypto.ec.CustomNamedCurves.getByName("secp256r1")
+                .getG().getEncoded(false);
+        WebPushRequestPreparer preparer = preparer(vapidPublic);
+        String token = "dQw4w9WgXcQ:APA91bH-fcm_token-example";
+        WebPushRecipient chrome = new WebPushRecipient("https://fcm.googleapis.com/fcm/send/" + token,
+                URL_ENCODER.encodeToString(recipientPublic), URL_ENCODER.encodeToString(authSecret));
+        WebPushMessage message = new WebPushMessage(9L, UUID.randomUUID(), NotificationType.INCIDENT_RESOLVED,
+                "RESOLVED", "recovered", Instant.parse("2026-10-08T00:00:00Z"));
+
+        PinnedHttpsRequest request = preparer.prepare(chrome, message);
+
+        // web-push가 Chrome 구독 경로를 VAPID 전송 경로로 바꾼다. 이전에는 이 변경 때문에 발송 전에 거절됐다.
+        assertThat(request.uri()).isEqualTo(URI.create("https://fcm.googleapis.com/wp/" + token));
+        assertThat(decryptAes128Gcm(request.body(), recipient, recipientPublic, authSecret)).isNotEmpty();
+        verifyVapid(header(request, "Authorization"), vapidPublic, "https://fcm.googleapis.com",
+                "mailto:ops@example.com");
+    }
+
+    @Test
+    void onlyTheFcmVapidPathRewriteIsAccepted() {
+        byte[] vapidPublic = org.bouncycastle.crypto.ec.CustomNamedCurves.getByName("secp256r1")
+                .getG().getEncoded(false);
+        WebPushRequestPreparer preparer = preparer(vapidPublic);
+        URI fcm = URI.create("https://fcm.googleapis.com/fcm/send/token-1");
+        URI mozilla = URI.create("https://updates.push.services.mozilla.com/wpush/v2/abc");
+
+        assertThat(preparer.sendTarget(mozilla, mozilla)).isEqualTo(mozilla);
+        assertThat(preparer.sendTarget(fcm, URI.create("https://fcm.googleapis.com/wp/token-1")))
+                .isEqualTo(URI.create("https://fcm.googleapis.com/wp/token-1"));
+        for (String changed : new String[]{
+                "https://evil.example/wp/token-1",
+                "https://fcm.googleapis.com/wp/other-token",
+                "https://fcm.googleapis.com/send/token-1",
+                "http://fcm.googleapis.com/wp/token-1",
+                "https://fcm.googleapis.com:8443/wp/token-1",
+                "https://user@fcm.googleapis.com/wp/token-1",
+                "https://fcm.googleapis.com/wp/token-1?x=1"}) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> preparer.sendTarget(fcm, URI.create(changed)))
+                    .as(changed).isInstanceOf(RuntimeException.class);
+        }
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> preparer.sendTarget(mozilla,
+                        URI.create("https://updates.push.services.mozilla.com/wp/abc")))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    private static WebPushRequestPreparer preparer(byte[] vapidPublic) {
+        byte[] vapidPrivate = new byte[32];
+        vapidPrivate[31] = 1;
+        VapidConfigurationProvider configuration = new VapidConfigurationProvider(
+                URL_ENCODER.encodeToString(vapidPublic), URL_ENCODER.encodeToString(vapidPrivate),
+                "mailto:ops@example.com");
+        return new WebPushRequestPreparer(configuration, new WebPushPayloadRenderer(MAPPER), new PushEndpointPolicy(""));
+    }
+
     private static byte[] decryptAes128Gcm(byte[] body, KeyPair recipient, byte[] recipientPublic,
                                             byte[] authSecret) throws Exception {
         ByteBuffer record = ByteBuffer.wrap(body);
