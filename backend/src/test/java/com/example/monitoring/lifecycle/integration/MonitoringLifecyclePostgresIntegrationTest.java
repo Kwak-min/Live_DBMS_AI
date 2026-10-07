@@ -147,7 +147,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
         assertThat(applicationContext.getBean(MonitoringLifecyclePort.class)).isSameAs(lifecycle);
         assertThat(Arrays.stream(flyway.info().applied())
                 .map(info -> info.getVersion().getVersion()))
-                .containsExactly("1", "2", "3", "4", "5");
+                .containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(tableExists("monitoring_states")).isTrue();
         assertThat(tableExists("event_outbox")).isTrue();
         assertThat(tableExists("processed_events")).isTrue();

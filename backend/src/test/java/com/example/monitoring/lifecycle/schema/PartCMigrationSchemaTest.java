@@ -84,7 +84,7 @@ class PartCMigrationSchemaTest {
     }
 
     @Test
-    void activeMigrationInventoryIsExactlyV1ThroughV5() throws IOException {
+    void activeMigrationInventoryIsExactlyV1ThroughV6() throws IOException {
         List<String> names = new ArrayList<>();
         collectMigrationNames(names, REPOSITORY.resolve("backend/src/main/resources/db/migration"));
         collectMigrationNames(names, REPOSITORY.resolve("backend/src/main/java/db/migration"));
@@ -95,7 +95,8 @@ class PartCMigrationSchemaTest {
                 "V2__part_b_auth_and_encrypt_database_credentials.java",
                 "V3__part_a_metrics_and_outbox.java",
                 "V4__part_c_monitoring.sql",
-                "V5__notification_success_receipts.sql");
+                "V5__notification_success_receipts.sql",
+                "V6__ai_reports.sql");
         assertThat(Files.exists(SCHEMA_ROOT.resolve("V4__part_c_monitoring.sql"))).isFalse();
     }
 

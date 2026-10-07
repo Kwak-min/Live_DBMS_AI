@@ -91,7 +91,7 @@ class NotificationSuccessReceiptMigrationTest {
             insertDelivery(jdbc, seed.openIncident(), 6, "INCIDENT_OPENED", "SLACK",
                     null, seed.webhookId(), "CANCELLED", created, null);
 
-            assertThat(Flyway.configure().dataSource(database.dataSource()).load()
+            assertThat(Flyway.configure().dataSource(database.dataSource()).target("5").load()
                     .migrate().migrationsExecuted).isOne();
 
             List<Map<String, Object>> receipts = jdbc.queryForList("""

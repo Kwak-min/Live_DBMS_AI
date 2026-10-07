@@ -70,7 +70,7 @@ Remove-Item Env:BOOTSTRAP_ADMIN_EMAIL, Env:BOOTSTRAP_ADMIN_PASSWORD, Env:BOOTSTR
 cd backend; ./gradlew.bat bootRun --no-daemon
 ```
 
-- `Started MonitoringApplication` 로그가 나오면 `http://127.0.0.1:8080`에서 동작한다. Flyway가 V1~V5를 자동 적용한다.
+- `Started MonitoringApplication` 로그가 나오면 `http://127.0.0.1:8080`에서 동작한다. Flyway가 V1~V6을 자동 적용한다.
 - 확인: `http://127.0.0.1:8080/actuator/health` → `{"status":"UP"}`, Swagger UI `http://127.0.0.1:8080/swagger-ui.html` (local 프로필만).
 - 수집기는 기본으로 켜져 있고 5초마다 수집한다.
 
@@ -84,6 +84,17 @@ $env:REALTIME_ENABLED = 'true'   # /ws STOMP 구독
 ```
 
 `NOTIFICATIONS_ENABLED`(Web Push·Slack 발송)는 VAPID 키 등 추가 설정이 필요하므로 [part-c-risk-notifications.md](part-c-risk-notifications.md)를 따른다.
+
+### AI 기능 켜기 (선택)
+
+일일 보고서·위험 쿼리 분석은 AI API 키가 있어야 생성된다. 기본 제공자는 Gemini이고 [Google AI Studio](https://aistudio.google.com)에서 무료로 키를 받을 수 있다. 키가 없어도 조회 API는 동작하고 생성 요청만 503 `AI_UNAVAILABLE`이다.
+
+```powershell
+$env:AI_ENABLED     = 'true'
+$env:GEMINI_API_KEY = '<발급받은 키>'   # 로컬 스크립트에만 두고 커밋하지 않는다
+```
+
+로컬 MariaDB에서 위험 쿼리 분석의 누적 통계를 보려면 `performance_schema=ON`이 필요하다. 자세한 내용은 [ai-insights.md](ai-insights.md).
 
 ## 5. 프론트 연결
 
@@ -123,7 +134,7 @@ ADMIN으로 로그인한 뒤 DB 관리 화면에서 다음 값으로 등록한�
 
 - 시각은 모두 UTC ISO 8601, 밀리초 3자리 + `Z` (예: `2026-10-01T02:48:09.786Z`).
 - `cpuUsage`·`memoryUsage`는 MariaDB 쿼리로 호스트 자원을 얻을 수 없어 v1에서는 항상 `null`이고 `unavailableMetrics`에 `UNSUPPORTED`로 표시된다.
-- 슬로우 쿼리 본문·프로세스 목록 API는 v1 범위에 없다. 슬로우 쿼리는 집계값(`slowQueries`, `slowQueriesDelta`, `slowQueriesPerSecond`)만 제공한다.
+- 슬로우 쿼리 본문·프로세스 목록 조회 API는 없다. 슬로우 쿼리는 집계값(`slowQueries`, `slowQueriesDelta`, `slowQueriesPerSecond`)만 제공하고, 쿼리 단위 분석은 AI 위험 쿼리 분석(리터럴 제거 후)으로만 제공한다.
 - 최신 스냅샷이 없으면 `latest`는 204(빈 본문), 대상이 없으면 404 `DATABASE_NOT_FOUND`.
 
 ## 8. 자주 막히는 곳

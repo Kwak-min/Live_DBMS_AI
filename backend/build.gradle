@@ -47,6 +47,10 @@ dependencies {
     // Target DBMS Driver (MariaDB)
     implementation 'org.mariadb.jdbc:mariadb-java-client:3.3.2'
 
+    // AI insights: Gemini(기본, 무료 등급) 또는 Claude
+    implementation 'com.google.genai:google-genai:1.75.0'
+    implementation 'com.anthropic:anthropic-java:2.68.0'
+
     // API Documentation (Swagger / OpenAPI)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
 
