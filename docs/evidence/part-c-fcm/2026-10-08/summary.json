@@ -1,0 +1,125 @@
+{
+    "schemaVersion":  1,
+    "testedCodeCommit":  "0ac113e5130798904059a8c28988adcd40b94c46",
+    "baseCommit":  "0a07ac6dc072d6eda63f6ed7173b7060b1debe31",
+    "backendTree":  "20f62ef731a169e941370e81d27d8c30261911cc",
+    "generatedAtUtc":  "2026-10-07T16:04:11.6413909Z",
+    "success":  true,
+    "uniqueTestsExecuted":  547,
+    "failures":  0,
+    "errors":  0,
+    "unexplainedSkipped":  0,
+    "phases":  [
+                   {
+                       "phase":  "normal",
+                       "tests":  547,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  44
+                   },
+                   {
+                       "phase":  "focused-redis",
+                       "tests":  27,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0
+                   },
+                   {
+                       "phase":  "native-redis-outage",
+                       "tests":  1,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0
+                   },
+                   {
+                       "phase":  "native-stage3",
+                       "tests":  11,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0
+                   },
+                   {
+                       "phase":  "native-part-c",
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0
+                   }
+               ],
+    "cryptoRegression":  {
+                             "preparerBytecodeSha256":  "6e15b70cbc0ab9512d8f7d556628fc5b2cea761482d2e89c3787d59683e0cd1b",
+                             "matchesHistoricalChromeBytecode":  true,
+                             "red":  {
+                                         "error":  "Prepared Web Push endpoint changed.",
+                                         "tests":  4,
+                                         "failures":  1
+                                     },
+                             "green":  {
+                                           "failures":  0,
+                                           "tests":  4
+                                       }
+                         },
+    "bootJar":  "passed",
+    "bootstrap":  {
+                      "repeat":  "rejected as expected",
+                      "first":  "passed"
+                  },
+    "sourceManifestSha256":  "d911f3266fcb4dc26583aab3a283ab0979ea30d5997c20c0c08d4d9fced70bba",
+    "initialEnvironmentFailure":  {
+                                      "phase":  "postgres-initdb",
+                                      "sameSourcePassedPhasesReused":  [
+                                                                           "normal",
+                                                                           "focused-redis",
+                                                                           "bootJar"
+                                                                       ],
+                                      "recoveredWith":  "ASCII evidence and tooling paths",
+                                      "reason":  "Windows Unicode data path encoding"
+                                  },
+    "executionScope":  {
+                           "productServiceWorker":  "Frontend verification pending",
+                           "stomp":  "Real HTTP login, native WebSocket/STOMP, query/Origin/SEND rejection, token expiry and HTTP logout",
+                           "mariaDbCollector":  "Not rerun; canonical persisted metric fixtures",
+                           "notification":  "Production pipeline with isolated PostgreSQL/Redis and local TLS provider fixtures",
+                           "externalProviderRequestsThisRun":  0
+                       },
+    "historicalDelivery":  {
+                               "chrome":  {
+                                              "dateKst":  "2026-10-08 00:13-00:14",
+                                              "baseCommit":  "41db273bc81f32b755e487005ebcee47836db6f3",
+                                              "localPatchSha256":  "4f74ad2f8615edf38d81393abb1098ab4af30d8418172b945af44c3131639344",
+                                              "browser":  "OPEN, RECOVERY, CLICK",
+                                              "messages":  2,
+                                              "page":  "Temporary QA page and service worker",
+                                              "provider":  201,
+                                              "delivery":  "SENT, attempt 1 each",
+                                              "humanReceipt":  "confirmed"
+                                          },
+                               "slack":  {
+                                             "messages":  2,
+                                             "delivery":  "SENT, attempt 1 each",
+                                             "codeCommit":  "b06df621f3cbf039c4cf246588fc2f13333bbd6a",
+                                             "dateKst":  "2026-10-07 23:00",
+                                             "provider":  "200/ok",
+                                             "humanChannelReceipt":  "confirmed"
+                                         }
+                           },
+    "cleanup":  {
+                    "validationPorts":  {
+                                            "16421":  "closed",
+                                            "16425":  "closed",
+                                            "55453":  "closed",
+                                            "16423":  "closed",
+                                            "18103":  "closed",
+                                            "18104":  "closed",
+                                            "18443":  "closed",
+                                            "18444":  "closed"
+                                        },
+                    "runtimeRemoved":  true
+                },
+    "localEvidence":  {
+                          "initial":  ".omo/evidence/part-c-fcm-finish/native",
+                          "note":  "Legacy report finalization is excluded; counters are independently reconciled from suite headers, successful command exits, source manifests and separate test-ID lists.",
+                          "remaining":  "current-chat visualization/part-c-fcm-native2",
+                          "crypto":  ".omo/evidence/part-c-fcm-finish/red.xml and green.xml"
+                      }
+}

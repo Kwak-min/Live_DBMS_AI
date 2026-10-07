@@ -7,6 +7,7 @@
 | [api.md](api.md) | REST 전 경로, DTO 필드, 오류 코드 |
 | [events.md](events.md) · [part-c-realtime.md](part-c-realtime.md) | STOMP 목적지·메시지·재연결/대조 규칙 |
 | [integration-security.md](integration-security.md) | 로그인·CSRF·Refresh·다중 탭 |
+| [frontend-c-contract.md](frontend-c-contract.md) | C 최종 STOMP·재연결·Push·클릭 연동 기준 |
 | [part-c-risk-notifications.md](part-c-risk-notifications.md) | Web Push 구독 계약 |
 | [ai-insights.md](ai-insights.md) | AI 보고서 API |
 | Swagger UI | 로컬 `http://127.0.0.1:8080/swagger-ui.html`, OpenAPI `/v3/api-docs` |

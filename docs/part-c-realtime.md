@@ -1,5 +1,8 @@
 # Part C realtime integration handoff
 
+> 2026-10-08 인계: 이 문서의 초기 구현·소유 전환 설명은 당시 기록이다. 현재 프론트 연결 기준은 [Part C 프론트 계약](frontend-c-contract.md), 최종 검증·수신 및 A/B 전환 기록은 [C 완료 보고](part-c-completion.md)를 따른다. STOMP는 #28의 Bearer-only 계약이며 A/B 상태 전환은 이미 검증한 구현을 사용한다.
+
+
 This is the checked-source handoff for the Part C realtime slice with V1-V5 migrations.
 It describes the current metric stream path, lifecycle boundary, and the
 metric-driven live-state consumer. It is an implementation handoff, not a
