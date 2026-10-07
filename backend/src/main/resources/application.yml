@@ -59,6 +59,9 @@ app:
     status-stream-key: stream:statuses
     incident-stream-key: stream:incidents
     heartbeat-stream-key: stream:collector-heartbeats
+    stream-retention:
+      enabled: ${APP_REDIS_STREAM_RETENTION_ENABLED:true}
+      interval-ms: ${APP_REDIS_STREAM_RETENTION_INTERVAL_MS:60000}
   collector:
     enabled: ${APP_COLLECTOR_ENABLED:true}
     fixed-rate-ms: ${APP_COLLECTOR_FIXED_RATE_MS:5000}
