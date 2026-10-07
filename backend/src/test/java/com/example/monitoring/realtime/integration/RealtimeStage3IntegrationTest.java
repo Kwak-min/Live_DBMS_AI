@@ -259,7 +259,7 @@ class RealtimeStage3IntegrationTest {
                 WHERE success = true AND version IS NOT NULL
                 ORDER BY installed_rank
                 """, String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6");
 
         List<Map<String, Object>> columns = jdbc.queryForList("""
                 SELECT column_name, data_type, character_maximum_length, is_nullable

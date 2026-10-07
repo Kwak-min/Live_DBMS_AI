@@ -219,7 +219,19 @@ WebhookInput: `{name:Text,provider:"SLACK",url:Text,enabled:boolean}`. name trim
 
 Delivery: `{id:Id,incidentId:Uuid,incidentVersion:Id,channel:WEB_PUSH|SLACK,recipientId:Id,status:PENDING|SENT|FAILED|CANCELLED,attemptCount:int,lastErrorCode:Text?,createdAt:Time,sentAt:Time?}`. 알림 결과 목록 기간은 createdAt 기준, 기본 24시간/최대 30일. 오류 코드는 TIMEOUT/RATE_LIMITED/RECIPIENT_GONE/REJECTED/PROVIDER_ERROR다. 수신처 삭제·이벤트 노후화는 CANCELLED이고 실패 재시도 대상으로 넣지 않는다. `eligibleAt`은 `expiresAt - 600 seconds`로 계산하는 내부 논리 값이며 공개 Delivery 응답에는 추가하지 않는다. active V4 physical values are `expires_at` and `next_attempt_at`; send/retry at or after `expiresAt` is `CANCELLED` and retries never extend the original window.
 
-## 8. 기준 커밋의 현재 REST 구현
+## 8. AI 인사이트 — A
+
+| Method / 경로 | 요청 | 응답·권한 |
+| --- | --- | --- |
+| GET `/api/v1/ai/status` | 없음 | 200 AiStatus, USER/ADMIN |
+| POST `/api/v1/databases/{id}/ai/daily-report` | date(YYYY-MM-DD) 선택 | 202 AiReport(PENDING), ADMIN |
+| POST `/api/v1/databases/{id}/ai/query-analysis` | 없음 | 202 AiReport(PENDING), ADMIN |
+| GET `/api/v1/ai/reports` | databaseConfigId,type,status,date,page,size | 200 AiReport 페이지, requestedAt DESC·id DESC, USER/ADMIN |
+| GET `/api/v1/ai/reports/{reportId}` | 없음 | 200 AiReport, USER/ADMIN |
+
+생성은 비동기이며 PENDING이 끝날 때까지 단건 조회로 확인한다. DTO·오류 코드·설정은 [AI 인사이트](ai-insights.md)를 따른다. 기본은 꺼져 있고(`AI_ENABLED=false`) 이때 생성 요청은 503 `AI_UNAVAILABLE`이다.
+
+## 9. 기준 커밋의 현재 REST 구현
 
 아래는 이전 코드 설명이며 위 v1 목표와 구분한다.
 

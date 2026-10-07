@@ -81,6 +81,22 @@ monitoring:
     enabled: ${REALTIME_ENABLED:false}
   notifications:
     enabled: ${NOTIFICATIONS_ENABLED:false}
+  ai:
+    # Claude 기반 일일 보고서·위험 쿼리 분석. 꺼져 있거나 키가 없으면 생성 API는 503 AI_UNAVAILABLE.
+    enabled: ${AI_ENABLED:false}
+    api-key: '${ANTHROPIC_API_KEY:}'
+    model: ${AI_MODEL:claude-opus-5-5}
+    effort: ${AI_EFFORT:medium}
+    max-output-tokens: 16000
+    refusal-fallback: ${AI_REFUSAL_FALLBACK:true}
+    daily-report-zone: ${AI_DAILY_REPORT_ZONE:Asia/Seoul}
+    daily-report-schedule-enabled: ${AI_DAILY_REPORT_SCHEDULE_ENABLED:true}
+    daily-report-cron: "0 10 0 * * *"
+    request-cooldown-seconds: ${AI_REQUEST_COOLDOWN_SECONDS:60}
+    max-queries-per-analysis: 20
+    retention-days: 180
+    worker-threads: 2
+    worker-queue-capacity: 50
 
 springdoc:
   api-docs:
