@@ -93,6 +93,7 @@ $RedisRootLinux = $null
 
 $Ports = [ordered]@{
     FocusedRedis = 16421
+    RiskOutageRedis = 16425
     PostgreSql = 55453
     NativeRedis = 16423
     Application = 18103
@@ -128,6 +129,7 @@ $PgStarted = $false
 $PgData = Join-Path $Runtime 'postgres'
 $FocusedRedis = $null
 $NativeRedis = $null
+$OutageState = $null
 $FocusedRedisLinuxPid = 0
 $NativeRedisLinuxPid = 0
 $OwnedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
@@ -154,6 +156,7 @@ $TouchedEnvironment = @(
     'PART_C_NATIVE_QA_SLACK_PORT', 'WEB_PUSH_VAPID_PUBLIC_KEY',
     'WEB_PUSH_VAPID_PRIVATE_KEY', 'WEB_PUSH_VAPID_SUBJECT', 'PUSH_ALLOWED_HOSTS',
     'BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_PASSWORD', 'BOOTSTRAP_ADMIN_DISPLAY_NAME'
+    'T16_NATIVE_ENABLED', 'T16_REDIS_PORT', 'T16_STREAM_KEY', 'T16_EVIDENCE_DIR'
 )
 foreach ($Name in $TouchedEnvironment) {
     $OldEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, 'Process')
@@ -264,7 +267,8 @@ function Invoke-BoundedProcess(
     [string]$StdoutPath,
     [string]$StderrPath,
     [int]$TimeoutSeconds,
-    [int[]]$AllowedExitCodes = @(0)
+    [int[]]$AllowedExitCodes = @(0),
+    [scriptblock]$Poll = $null
 ) {
     Assert-PathWithin $Evidence $StdoutPath
     Assert-PathWithin $Evidence $StderrPath
@@ -274,10 +278,16 @@ function Invoke-BoundedProcess(
         -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
     $ProcessHandle = $Process.Handle
     $OwnedProcesses.Add($Process)
-    if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
-        Stop-Process -Force -Id $Process.Id -ErrorAction SilentlyContinue
-        [void]$Process.WaitForExit(5000)
-        throw "Command timed out after $TimeoutSeconds seconds: $Name"
+    $Elapsed = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $Process.WaitForExit(250)) {
+        if ($Elapsed.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+            Stop-Process -Force -Id $Process.Id -ErrorAction SilentlyContinue
+            [void]$Process.WaitForExit(5000)
+            throw "Command timed out after $TimeoutSeconds seconds: $Name"
+        }
+        if ($null -ne $Poll) {
+            & $Poll | Out-Null
+        }
     }
     $Process.WaitForExit()
     $ProcessExitCode = $Process.ExitCode
@@ -360,13 +370,13 @@ function Save-FreshJUnit(
     }
 }
 
-function Invoke-GradlePhase([string]$Phase, [string[]]$Arguments) {
+function Invoke-GradlePhase([string]$Phase, [string[]]$Arguments, [scriptblock]$Poll = $null) {
     Assert-FrozenSource | Out-Null
     Remove-TestResults
     $Started = [datetime]::UtcNow
     $Out = Join-Path $Evidence "$Phase-gradle.out.log"
     $Err = Join-Path $Evidence "$Phase-gradle.err.log"
-    $Result = Invoke-BoundedProcess $Phase $Gradle $Arguments $Out $Err $CommandTimeoutSeconds
+    $Result = Invoke-BoundedProcess $Phase $Gradle $Arguments $Out $Err $CommandTimeoutSeconds -Poll $Poll
     $Ended = [datetime]::UtcNow
     $JUnit = Save-FreshJUnit $Phase $Started $Ended
     Assert-FrozenSource | Out-Null
@@ -392,6 +402,9 @@ function Assert-NormalPartCCoverage([object]$JUnit) {
         'com.example.monitoring.integration.PartCHttpContractTest',
         'com.example.monitoring.realtime.integration.PartCNativeQaTest',
         'com.example.monitoring.notification.integration.PartCProviderNativeQaTest'
+        'com.example.monitoring.common.stream.RedisStreamRetentionContextTest'
+        'com.example.monitoring.common.stream.RedisStreamRetentionIntegrationTest'
+        'com.example.monitoring.risk.scheduler.RiskRedisOutageNativeTest'
     )
     $Coverage = [ordered]@{}
     $KnownNewTests = 0
@@ -806,7 +819,7 @@ function Assert-SkipReconciliation {
     Assert-True ($Normal.tests -ge $MinimumNormalTests) `
         "Normal suite discovered $($Normal.tests), below baseline $MinimumNormalTests"
     $Rerun = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($Phase in @('focused-redis', 'native-stage3', 'native-part-c')) {
+    foreach ($Phase in @('focused-redis', 'native-redis-outage', 'native-stage3', 'native-part-c')) {
         foreach ($Id in $PhaseSummaries[$Phase].junit.executedIds) {
             [void]$Rerun.Add($Id)
         }
@@ -1032,7 +1045,7 @@ try {
 
     foreach ($Name in @(
         'STAGE3_INTEGRATION_ENABLED', 'PART_C_NATIVE_QA_ENABLED',
-        'RISK_ENABLED', 'REALTIME_ENABLED', 'NOTIFICATIONS_ENABLED'
+        'RISK_ENABLED', 'REALTIME_ENABLED', 'NOTIFICATIONS_ENABLED', 'T16_NATIVE_ENABLED'
     )) {
         Remove-Item "Env:$Name" -ErrorAction SilentlyContinue
     }
@@ -1074,6 +1087,7 @@ allprojects {
         '-p', $Backend, '--offline', 'test',
         '--tests', 'com.example.monitoring.realtime.redis.RedisMetricConsumerIntegrationTest',
         '--tests', 'com.example.monitoring.common.stream.RedisStreamWorkerIntegrationTest',
+        '--tests', 'com.example.monitoring.common.stream.RedisStreamRetentionIntegrationTest',
         '--init-script', $RedisTestProperties,
         '--rerun-tasks', '--no-daemon', '--console=plain'
     )
@@ -1115,6 +1129,46 @@ allprojects {
     $env:RISK_ENABLED = 'false'
     $env:REALTIME_ENABLED = 'true'
     $env:NOTIFICATIONS_ENABLED = 'false'
+
+    $OutageEvidence = Join-Path $Evidence 't16-outage'
+    New-Item -ItemType Directory -Path $OutageEvidence | Out-Null
+    $OutageState = [pscustomobject]@{
+        current = (Start-Redis 't16-original' $Ports.RiskOutageRedis)
+        restarted = $false
+        marker = (Join-Path $OutageEvidence 'restart-redis')
+    }
+    $env:T16_NATIVE_ENABLED = 'true'
+    $env:T16_REDIS_PORT = [string]$Ports.RiskOutageRedis
+    $env:T16_STREAM_KEY = "stream:t16-native:$PID"
+    $env:T16_EVIDENCE_DIR = $OutageEvidence
+    $OutagePoll = {
+        if (-not $OutageState.restarted -and (Test-Path -LiteralPath $OutageState.marker)) {
+            Assert-True (-not (Test-Port $Ports.RiskOutageRedis)) 'T16 Redis port must be closed before restart'
+            Assert-True ($OutageState.current.process.WaitForExit(10000)) 'Original T16 Redis wrapper did not exit'
+            Assert-True (-not (Test-WslPid 't16-original' $OutageState.current.linuxPid)) 'Original T16 Redis PID is still alive'
+            $CleanupResults.Add([ordered]@{
+                resource = 't16-original'
+                wrapperPid = $OutageState.current.process.Id
+                linuxPid = $OutageState.current.linuxPid
+                closed = $true
+                linuxPidExited = $true
+            })
+            $OutageState.current = Start-Redis 't16-restarted' $Ports.RiskOutageRedis
+            $OutageState.restarted = $true
+        }
+    }
+    $Outage = Invoke-GradlePhase 'native-redis-outage' @(
+        '-p', $Backend, '--offline', 'test',
+        '--tests', 'com.example.monitoring.risk.scheduler.RiskRedisOutageNativeTest',
+        '--rerun-tasks', '--no-daemon', '--console=plain'
+    ) -Poll $OutagePoll
+    Assert-True ($Outage.junit.tests -eq 1 -and $Outage.junit.skipped -eq 0) 'T16 native outage test did not execute'
+    Assert-True $OutageState.restarted 'T16 Redis restart request was not observed'
+    Stop-Redis 't16-restarted' $OutageState.current
+    $OutageState.current = $null
+    foreach ($Name in @('T16_NATIVE_ENABLED', 'T16_REDIS_PORT', 'T16_STREAM_KEY', 'T16_EVIDENCE_DIR')) {
+        Remove-Item "Env:$Name" -ErrorAction SilentlyContinue
+    }
 
     $env:STAGE3_INTEGRATION_ENABLED = 'true'
     $env:STAGE3_APP_PORT = [string]$Ports.Application
@@ -1192,6 +1246,9 @@ catch {
 finally {
     Stop-Redis 'focused-redis' $FocusedRedis
     Stop-Redis 'native-redis' $NativeRedis
+    if ($null -ne $OutageState) {
+        Stop-Redis 't16-redis' $OutageState.current
+    }
     Stop-Postgres $Postgres
     foreach ($Process in @($OwnedProcesses)) {
         try {
