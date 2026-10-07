@@ -21,8 +21,19 @@ class PasswordHashingServiceTest {
     }
 
     @Test
-    void rejectsPasswordShorterThanTwelveUnicodeCodePoints() {
-        assertThatThrownBy(() -> passwordHashingService.hash("short-pass"))
+    void rejectsPasswordShorterThanEightUnicodeCodePoints() {
+        assertThatThrownBy(() -> passwordHashingService.hash("seven77"))
+                .isInstanceOf(PasswordHashingService.PasswordPolicyException.class);
+        assertThatThrownBy(() -> passwordHashingService.hash("😀".repeat(7)))
+                .isInstanceOf(PasswordHashingService.PasswordPolicyException.class);
+    }
+
+    @Test
+    void acceptsEightAndRejectsMoreThan128UnicodeCodePoints() {
+        passwordHashingService.validate("eight888");
+        passwordHashingService.validate("😀".repeat(8));
+        passwordHashingService.validate("a".repeat(128));
+        assertThatThrownBy(() -> passwordHashingService.validate("a".repeat(129)))
                 .isInstanceOf(PasswordHashingService.PasswordPolicyException.class);
     }
 }

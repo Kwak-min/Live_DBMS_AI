@@ -14,6 +14,6 @@ public record SignupRequest(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Display name, trimmed; 1..100 Unicode code points") String displayName,
         @NotNull
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, accessMode = Schema.AccessMode.WRITE_ONLY,
-                description = "12..128 Unicode code points, at most 1024 UTF-8 bytes; never trimmed") String password
+                description = "8..128 Unicode code points, at most 1024 UTF-8 bytes; never trimmed") String password
 ) {
 }

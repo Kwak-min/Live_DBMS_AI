@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class PasswordHashingService {
 
-    private static final int MIN_CODE_POINTS = 12;
+    private static final int MIN_CODE_POINTS = 8;
     private static final int MAX_CODE_POINTS = 128;
     private static final int MAX_UTF8_BYTES = 1024;
 
@@ -34,7 +34,7 @@ public class PasswordHashingService {
         }
         int codePoints = rawPassword.codePointCount(0, rawPassword.length());
         if (codePoints < MIN_CODE_POINTS || codePoints > MAX_CODE_POINTS) {
-            throw new PasswordPolicyException("비밀번호는 12~128자여야 합니다.");
+            throw new PasswordPolicyException("비밀번호는 8~128자여야 합니다.");
         }
         if (rawPassword.getBytes(StandardCharsets.UTF_8).length > MAX_UTF8_BYTES) {
             throw new PasswordPolicyException("비밀번호는 UTF-8 기준 1024바이트 이하여야 합니다.");

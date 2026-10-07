@@ -5,7 +5,7 @@
 ## 1. 계정·역할
 
 - 일반 가입은 USER, 최초 Admin은 bootstrap 전용 실행 프로필에서 생성한다. `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_DISPLAY_NAME`을 환경으로 주입하고, 사용자 테이블이 비어 있을 때만 생성한다. 실행 후 종료하며 HTTP 서버를 열지 않는다. 계정이 있으면 생성 없이 실패하고 운영자에게 이유를 반환한다.
-- 사용자 비밀번호: 12~128 Unicode code point, UTF-8 최대 1024 byte. 공백도 원문 그대로 해시하며 trim/절단/문자 정규화 금지. DB 접속 비밀번호와 규칙을 혼용하지 않는다.
+- 사용자 비밀번호: 8~128 Unicode code point, UTF-8 최대 1024 byte. 공백도 원문 그대로 해시하며 trim/절단/문자 정규화 금지. DB 접속 비밀번호와 규칙을 혼용하지 않는다.
 - 저장 해시: Argon2id, memory 19456KiB, iterations 2, parallelism 1, salt 16byte, hash 32byte. 해시 문자열에 알고리즘·파라미터를 저장한다. 해시/솔트는 응답하지 않는다. 이 초기값은 [OWASP 권고](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)를 따른다.
 - email 정규화 값에 unique 제약. 사용자 활성 상태와 authVersion(초기 1)을 저장한다. 권한/활성 상태 변경은 authVersion 증가와 전체 세션 폐기를 같은 트랜잭션으로 처리한다.
 - USER/ADMIN 모두 모든 DB·메트릭·사건·상태 조회 가능. DB 변경/Ping/정책/사용자/공용 Webhook/감사 조회는 ADMIN. Push는 본인 소유만 조작 가능하다.
