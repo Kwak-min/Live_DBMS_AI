@@ -42,12 +42,16 @@ public final class WebPushRequestPreparer {
 
     public PinnedHttpsRequest prepare(WebPushRecipient recipient, WebPushMessage message) {
         URI endpoint = endpointPolicy.validate(recipient.endpoint());
+        if ("fcm.googleapis.com".equalsIgnoreCase(endpoint.getHost())
+                && endpoint.getRawPath().startsWith("/fcm/send/")) {
+            endpoint = endpointPolicy.validate(endpoint.toString().replaceFirst("/fcm/send/", "/wp/"));
+        }
         VapidConfiguration configuration = configurationProvider.requireConfigured();
         ensureBouncyCastle();
         try {
             PushService pushService = new PushService(
                     configuration.publicKey(), configuration.privateKey(), configuration.subject());
-            Notification notification = new Notification(recipient.endpoint(), recipient.p256dh(), recipient.auth(),
+            Notification notification = new Notification(endpoint.toString(), recipient.p256dh(), recipient.auth(),
                     payloadRenderer.render(message), TTL_SECONDS);
             HttpPost prepared = pushService.preparePost(notification, Encoding.AES128GCM);
             if (!endpoint.equals(prepared.getURI())) {
