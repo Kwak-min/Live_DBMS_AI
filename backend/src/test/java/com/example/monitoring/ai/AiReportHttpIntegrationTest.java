@@ -73,7 +73,7 @@ import static org.mockito.Mockito.when;
         "monitoring.retention.enabled=false",
         "spring.task.scheduling.enabled=false",
         "monitoring.ai.enabled=true",
-        "monitoring.ai.api-key=test-key-not-used",
+        "monitoring.ai.gemini-api-key=test-key-not-used",
         "monitoring.ai.daily-report-zone=UTC",
         "monitoring.ai.daily-report-schedule-enabled=false"
 })
@@ -144,7 +144,7 @@ class AiReportHttpIntegrationTest {
         ValueOperations<String, String> values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
         when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
-        when(aiClient.model()).thenReturn("claude-opus-5-5");
+        when(aiClient.model()).thenReturn("gemini-3.8-flash");
 
         adminToken = token(UserRole.ADMIN);
         userToken = token(UserRole.USER);
@@ -156,7 +156,8 @@ class AiReportHttpIntegrationTest {
     void statusReportsAvailabilityToAnyAuthenticatedUser() throws Exception {
         JsonNode status = json(send("GET", "/api/v1/ai/status", userToken), 200);
         assertThat(status.path("available").asBoolean()).isTrue();
-        assertThat(status.path("model").asText()).isEqualTo("claude-opus-5-5");
+        assertThat(status.path("provider").asText()).isEqualTo("gemini");
+        assertThat(status.path("model").asText()).isEqualTo("gemini-3.8-flash");
         assertThat(status.path("timeZone").asText()).isEqualTo("UTC");
         assertThat(status.path("dailyReportScheduled").asBoolean()).isFalse();
         assertThat(send("GET", "/api/v1/ai/status", null).statusCode()).isEqualTo(401);

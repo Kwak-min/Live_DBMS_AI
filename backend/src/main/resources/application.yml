@@ -82,10 +82,14 @@ monitoring:
   notifications:
     enabled: ${NOTIFICATIONS_ENABLED:false}
   ai:
-    # Claude 기반 일일 보고서·위험 쿼리 분석. 꺼져 있거나 키가 없으면 생성 API는 503 AI_UNAVAILABLE.
+    # AI 일일 보고서·위험 쿼리 분석. 꺼져 있거나 선택한 제공자의 키가 없으면 생성 API는 503 AI_UNAVAILABLE.
     enabled: ${AI_ENABLED:false}
+    # gemini(기본, Google AI Studio 무료 등급 사용 가능) 또는 claude
+    provider: ${AI_PROVIDER:gemini}
+    gemini-api-key: '${GEMINI_API_KEY:}'
     api-key: '${ANTHROPIC_API_KEY:}'
-    model: ${AI_MODEL:claude-opus-5-5}
+    # 비우면 제공자 기본 모델(gemini-3.8-flash / claude-opus-5-5)
+    model: '${AI_MODEL:}'
     effort: ${AI_EFFORT:medium}
     max-output-tokens: 16000
     refusal-fallback: ${AI_REFUSAL_FALLBACK:true}

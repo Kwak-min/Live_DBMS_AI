@@ -10,7 +10,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * LLM 경계. 운영 구현은 {@link ClaudeAiInsightClient}이고 테스트는 가짜 구현으로 바꾼다.
+ * LLM 경계. 운영 구현은 {@link GeminiAiInsightClient}(기본)와 {@link ClaudeAiInsightClient}이고 테스트는 가짜 구현으로 바꾼다.
  * 실패는 {@link AiGenerationException}으로만 던진다.
  */
 public interface AiInsightClient {

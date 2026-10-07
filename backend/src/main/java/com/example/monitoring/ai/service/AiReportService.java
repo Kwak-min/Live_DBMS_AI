@@ -141,7 +141,7 @@ public class AiReportService {
     }
 
     public AiStatusResponse status() {
-        return new AiStatusResponse(properties.generationAvailable(), properties.model(),
+        return new AiStatusResponse(properties.generationAvailable(), properties.provider(), properties.model(),
                 properties.zone().getId(), properties.generationAvailable() && properties.dailyReportScheduleEnabled(),
                 properties.requestCooldownSeconds());
     }

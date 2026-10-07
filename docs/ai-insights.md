@@ -1,6 +1,6 @@
 # AI 인사이트 (일일 보고서·위험 쿼리 분석)
 
-초기 기획에서 Phase 2로 미뤘던 AI 기능 두 가지를 백엔드에 구현했다. Claude API(Anthropic)를 쓰며 기본은 꺼져 있다(`AI_ENABLED=false`). 꺼져 있어도 조회 API와 화면은 동작하고, 생성 요청만 503 `AI_UNAVAILABLE`이다.
+초기 기획에서 Phase 2로 미뤘던 AI 기능 두 가지를 백엔드에 구현했다. AI 제공자는 Google Gemini(기본, 무료 등급 사용 가능)와 Anthropic Claude(유료) 중 `AI_PROVIDER`로 고른다. 기본은 꺼져 있다(`AI_ENABLED=false`). 꺼져 있어도 조회 API와 화면은 동작하고, 생성 요청만 503 `AI_UNAVAILABLE`이다.
 
 | 기능 | 하는 일 | 생성 방식 |
 | --- | --- | --- |
@@ -30,7 +30,7 @@
 | 429 | RATE_LIMITED | 같은 대상·종류는 60초에 한 번. `Retry-After` 헤더 |
 | 503 | AI_UNAVAILABLE / AI_BUSY / DEPENDENCY_UNAVAILABLE | AI 꺼짐·키 없음 / 대기열 가득 참 / Redis 장애 |
 
-AiStatus: `{available:boolean,model:Text,timeZone:Text,dailyReportScheduled:boolean,requestCooldownSeconds:int}`.
+AiStatus: `{available:boolean,provider:gemini|claude,model:Text,timeZone:Text,dailyReportScheduled:boolean,requestCooldownSeconds:int}`.
 
 AiReport: `{id:Id,type:DAILY_REPORT|QUERY_ANALYSIS,databaseConfigId:Id,databaseName:Text,reportDate:Date?,windowStart:Time?,windowEnd:Time?,status:PENDING|SUCCEEDED|FAILED,triggerSource:SCHEDULED|MANUAL,model:Text,requestedAt:Time,completedAt:Time?,errorCode:Text?,errorMessage:Text?,inputTokens:int?,outputTokens:int?,dailyReport:DailyReport?,queryAnalysis:QueryAnalysis?}`.
 
@@ -55,10 +55,12 @@ QueryAnalysis: `{source:PERFORMANCE_SCHEMA|PROCESSLIST,collectedAt:Time,summary:
 | 환경 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `AI_ENABLED` | false | 생성 기능 켜기 |
-| `ANTHROPIC_API_KEY` | (없음) | Claude API 키. 비밀값이며 저장소·문서에 넣지 않는다. |
-| `AI_MODEL` | claude-opus-5-5 | 모델 ID |
-| `AI_EFFORT` | medium | low / medium / high / xhigh / max |
-| `AI_REFUSAL_FALLBACK` | true | 안전 분류기 거절 시 서버 측 대체 모델 재시도(`fallbacks: "default"`) |
+| `AI_PROVIDER` | gemini | `gemini` 또는 `claude` |
+| `GEMINI_API_KEY` | (없음) | Gemini API 키(provider=gemini). 비밀값이며 저장소·문서에 넣지 않는다. |
+| `ANTHROPIC_API_KEY` | (없음) | Claude API 키(provider=claude). 비밀값. |
+| `AI_MODEL` | (비움) | 비우면 제공자 기본 모델: `gemini-3.8-flash` / `claude-opus-5-5` |
+| `AI_EFFORT` | medium | Claude만 사용. low / medium / high / xhigh / max |
+| `AI_REFUSAL_FALLBACK` | true | Claude만 사용. 안전 분류기 거절 시 서버 측 대체 모델 재시도 |
 | `AI_DAILY_REPORT_ZONE` | Asia/Seoul | 하루의 기준 시간대 |
 | `AI_DAILY_REPORT_SCHEDULE_ENABLED` | true | 매일 00:10 전날 보고서 자동 생성 |
 | `AI_REQUEST_COOLDOWN_SECONDS` | 60 | 수동 요청 간격(대상·종류별) |
@@ -66,7 +68,17 @@ QueryAnalysis: `{source:PERFORMANCE_SCHEMA|PROCESSLIST,collectedAt:Time,summary:
 - 생성은 백엔드 안의 전용 스레드 2개에서 돌고 대기열은 50건이다. 단일 인스턴스 배포를 전제로, 재시작 시 끝나지 못한 PENDING은 `INTERRUPTED`로 닫는다.
 - 보고서는 180일 보관 후 매일 정리한다(`ai_reports`, V6 migration).
 - 자동 생성은 활성 대상 중 그날 메트릭이 있고 아직 성공·진행 중 보고서가 없는 대상만 만든다.
-- 비용은 보고서 1건당 입력 수천~1만 토큰 수준이다. 응답의 `inputTokens`/`outputTokens`로 확인한다.
+- 사용량은 보고서 1건당 입력 수천~1만 토큰 수준이다. 응답의 `inputTokens`/`outputTokens`로 확인한다.
+
+### 제공자 선택
+
+| | Gemini (기본) | Claude |
+| --- | --- | --- |
+| 비용 | Google AI Studio 무료 등급으로 사용 가능(분당·일일 호출 한도 있음, 한도는 AI Studio에서 확인) | 사용량 과금. Opus 5.5 기준 보고서 1건 약 $0.05~0.15 |
+| 키 발급 | aistudio.google.com → Get API key | console.anthropic.com → 결제 등록 → API Keys |
+| 데이터 사용 | 무료 등급은 입력 내용이 Google 제품 개선에 쓰일 수 있다(유료 등급은 아님) | 학습에 쓰지 않음 |
+
+무료 등급 한도를 넘으면 해당 보고서는 `FAILED`/`AI_RATE_LIMITED`로 끝나며 잠시 뒤 다시 요청하면 된다. 일일 자동 생성 대상이 많으면 한도에 걸릴 수 있으니 `AI_DAILY_REPORT_SCHEDULE_ENABLED=false`로 두고 수동 생성만 써도 된다.
 
 ## 3. 위험 쿼리 분석의 대상 DB 조건
 
@@ -76,9 +88,9 @@ QueryAnalysis: `{source:PERFORMANCE_SCHEMA|PROCESSLIST,collectedAt:Time,summary:
 
 ## 4. 외부로 보내는 데이터
 
-Claude API로 보내는 것과 보내지 않는 것을 구분한다.
+AI 제공자(Gemini 또는 Claude)로 보내는 것과 보내지 않는 것을 구분한다.
 
 - 보낸다: 대상 표시 이름, 메트릭 집계, 사건 요약(규칙·수치·메시지), 리터럴을 지운 쿼리 문장과 통계.
 - 보내지 않는다: 대상 host·port·계정·비밀번호, 사용자 정보, 원본 쿼리 값.
 - 쿼리 문장은 PERFORMANCE_SCHEMA digest(이미 값이 `?`로 바뀐 문장)든 PROCESSLIST 원문이든 백엔드의 `SqlLiteralRedactor`가 문자열·숫자·16진수 리터럴과 주석을 `?`로 바꾼 뒤 보낸다. 테이블·컬럼 이름은 남는다.
-- 실데이터 DB에 켜기 전에 이 범위를 팀·데이터 소유자와 확인한다.
+- Gemini 무료 등급은 보낸 내용이 Google 제품 개선에 쓰일 수 있다. 실데이터 DB에 켜기 전에 이 범위를 팀·데이터 소유자와 확인하고, 필요하면 유료 등급이나 Claude를 쓴다.

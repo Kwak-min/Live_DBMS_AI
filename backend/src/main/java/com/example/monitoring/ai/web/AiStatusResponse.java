@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record AiStatusResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
                 description = "true when AI is enabled and an API key is configured") boolean available,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = {"gemini", "claude"}) String provider,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String model,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
                 description = "IANA time zone that defines a report day") String timeZone,

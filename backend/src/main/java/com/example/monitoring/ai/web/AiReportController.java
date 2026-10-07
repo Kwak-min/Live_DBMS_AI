@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1")
-@Tag(name = "AI Insights API", description = "Claude-generated daily DB health reports and risky query analysis")
+@Tag(name = "AI Insights API", description = "AI-generated (Gemini or Claude) daily DB health reports and risky query analysis")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AiReportController {
 

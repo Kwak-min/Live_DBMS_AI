@@ -87,11 +87,11 @@ $env:REALTIME_ENABLED = 'true'   # /ws STOMP 구독
 
 ### AI 기능 켜기 (선택)
 
-일일 보고서·위험 쿼리 분석은 Claude API 키가 있어야 생성된다. 키가 없어도 조회 API는 동작하고 생성 요청만 503 `AI_UNAVAILABLE`이다.
+일일 보고서·위험 쿼리 분석은 AI API 키가 있어야 생성된다. 기본 제공자는 Gemini이고 [Google AI Studio](https://aistudio.google.com)에서 무료로 키를 받을 수 있다. 키가 없어도 조회 API는 동작하고 생성 요청만 503 `AI_UNAVAILABLE`이다.
 
 ```powershell
-$env:AI_ENABLED        = 'true'
-$env:ANTHROPIC_API_KEY = '<발급받은 키>'   # 로컬 스크립트에만 두고 커밋하지 않는다
+$env:AI_ENABLED     = 'true'
+$env:GEMINI_API_KEY = '<발급받은 키>'   # 로컬 스크립트에만 두고 커밋하지 않는다
 ```
 
 로컬 MariaDB에서 위험 쿼리 분석의 누적 통계를 보려면 `performance_schema=ON`이 필요하다. 자세한 내용은 [ai-insights.md](ai-insights.md).
