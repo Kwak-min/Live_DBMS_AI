@@ -53,7 +53,7 @@ $env:LEGACY_TIME_ZONE             = 'Asia/Seoul'
 . $HOME\live-dbms-local.ps1
 $env:SPRING_PROFILES_ACTIVE        = 'local,bootstrap-admin'
 $env:BOOTSTRAP_ADMIN_EMAIL         = 'admin@local.test'
-$env:BOOTSTRAP_ADMIN_PASSWORD      = '<12~128자 비밀번호>'
+$env:BOOTSTRAP_ADMIN_PASSWORD      = '<8~128자 비밀번호>'
 $env:BOOTSTRAP_ADMIN_DISPLAY_NAME  = 'Local Admin'
 cd backend; ./gradlew.bat bootRun --no-daemon; cd ..
 Remove-Item Env:BOOTSTRAP_ADMIN_EMAIL, Env:BOOTSTRAP_ADMIN_PASSWORD, Env:BOOTSTRAP_ADMIN_DISPLAY_NAME
