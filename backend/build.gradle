@@ -68,3 +68,25 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// 로컬 개발 편의: bootRun만 backend/.env(커밋 금지)의 KEY=VALUE를 환경 변수로 넣는다.
+// 실제 환경 변수가 이미 있으면 그쪽이 우선한다. 테스트·배포 실행에는 영향을 주지 않는다.
+tasks.named('bootRun') {
+    def envFile = file('.env')
+    if (envFile.exists()) {
+        envFile.eachLine('UTF-8') { line ->
+            def trimmed = line.trim()
+            if (!trimmed || trimmed.startsWith('#') || !trimmed.contains('=')) return
+            def parts = trimmed.split('=', 2)
+            def key = parts[0].trim()
+            def value = parts[1].trim()
+            if (value.length() >= 2 && ((value.startsWith('"') && value.endsWith('"'))
+                    || (value.startsWith("'") && value.endsWith("'")))) {
+                value = value.substring(1, value.length() - 1)
+            }
+            if (key && System.getenv(key) == null) {
+                environment key, value
+            }
+        }
+    }
+}

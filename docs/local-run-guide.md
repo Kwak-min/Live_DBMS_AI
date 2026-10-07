@@ -20,7 +20,7 @@ PostgreSQL 16 · Redis 7.4 · 대상 MariaDB 10.11이 `127.0.0.1`에만 열린�
 
 ## 2. 로컬 키 만들기 (처음 한 번)
 
-환경 변수로 넣는다(`local` 프로필은 `backend/.env`도 읽지만, 아래 키는 저장소 밖 스크립트에 두는 것을 권장한다). 아래로 무작위 키 두 개를 만든다.
+환경 변수로 넣는다(`bootRun`은 `backend/.env`도 읽지만, 아래 키는 저장소 밖 스크립트에 두는 것을 권장한다). 아래로 무작위 키 두 개를 만든다.
 
 ```powershell
 function New-LocalKey { $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b) }
@@ -91,7 +91,7 @@ $env:REALTIME_ENABLED = 'true'   # /ws STOMP 구독
 
 일일 보고서·위험 쿼리 분석은 AI API 키가 있어야 생성된다. 기본 제공자는 Gemini이고 [Google AI Studio](https://aistudio.google.com)에서 무료로 키를 받을 수 있다. 키가 없어도 조회 API는 동작하고 생성 요청만 503 `AI_UNAVAILABLE`이다.
 
-`backend/.env` 파일(커밋되지 않음, `.gitignore` 대상)에 넣으면 `local` 프로필이 자동으로 읽는다. 실제 환경 변수가 있으면 그쪽이 우선한다. `.env.example`에는 절대 실제 키를 넣지 않는다(커밋된다).
+`backend/.env` 파일(커밋되지 않음, `.gitignore` 대상)에 넣으면 `./gradlew.bat bootRun`이 환경 변수로 읽는다. 실제 환경 변수가 있으면 그쪽이 우선한다. 테스트(`gradlew test`)는 `.env`를 읽지 않는다. `.env.example`에는 절대 실제 키를 넣지 않는다(커밋된다).
 
 ```
 # backend/.env

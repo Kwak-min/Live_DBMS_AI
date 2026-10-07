@@ -30,4 +30,4 @@ Live_DBMS_AI/
 
 **로컬에서 백엔드를 띄워 프론트를 연결하려면 [로컬 실행 가이드](docs/local-run-guide.md)를 따르세요.**
 
-백엔드 빌드 설정은 Java 17, Spring Boot 3.2.3, Gradle Wrapper 8.5입니다. PostgreSQL·Redis 및 수집 대상 MariaDB가 필요합니다. 접속 환경 변수는 [backend/.env.example](backend/.env.example), 설정 기본값은 [application.yml](backend/src/main/resources/application.yml)을 확인하세요. `local` 프로필은 `backend/.env`(커밋되지 않음)를 자동으로 읽고, 실제 환경 변수가 있으면 그쪽이 우선합니다. 팀 공통 실행 목표는 저장·운영 규격에 정리했으며 실제 환경 구성·통합 검증은 후속 구현 작업입니다.
+백엔드 빌드 설정은 Java 17, Spring Boot 3.2.3, Gradle Wrapper 8.5입니다. PostgreSQL·Redis 및 수집 대상 MariaDB가 필요합니다. 접속 환경 변수는 [backend/.env.example](backend/.env.example), 설정 기본값은 [application.yml](backend/src/main/resources/application.yml)을 확인하세요. `./gradlew.bat bootRun`은 `backend/.env`(커밋되지 않음)를 환경 변수로 읽고, 실제 환경 변수가 있으면 그쪽이 우선합니다. 테스트는 `.env`를 읽지 않습니다. 팀 공통 실행 목표는 저장·운영 규격에 정리했으며 실제 환경 구성·통합 검증은 후속 구현 작업입니다.

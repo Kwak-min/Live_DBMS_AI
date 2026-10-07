@@ -5,9 +5,8 @@ spring:
   config:
     activate:
       on-profile: local
-    # 로컬 전용: backend/.env(커밋 금지, .gitignore 대상)의 KEY=VALUE를 환경 변수처럼 읽는다.
-    # 실제 환경 변수가 있으면 그쪽이 우선한다.
-    import: "optional:file:.env[.properties]"
+    # backend/.env는 여기서 읽지 않는다. 테스트도 local 프로필을 쓰므로, 여기서 읽으면 개인 .env의
+    # 기능 스위치·Redis 주소가 테스트에 섞인다. .env는 bootRun 태스크만 환경 변수로 넣는다(build.gradle).
 
   datasource:
     url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/monitoring_db}"
