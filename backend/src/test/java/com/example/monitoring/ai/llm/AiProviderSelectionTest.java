@@ -23,7 +23,9 @@ class AiProviderSelectionTest {
                     assertThat(context.getBean(AiInsightClient.class)).isInstanceOf(GeminiAiInsightClient.class);
                     AiProperties properties = context.getBean(AiProperties.class);
                     assertThat(properties.provider()).isEqualTo("gemini");
-                    assertThat(properties.model()).isEqualTo("gemini-3.8-flash");
+                    assertThat(properties.model()).isEqualTo("gemini-3.6-flash");
+                    assertThat(properties.modelCandidates())
+                            .containsExactly("gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite");
                     assertThat(properties.generationAvailable()).isTrue();
                 });
     }

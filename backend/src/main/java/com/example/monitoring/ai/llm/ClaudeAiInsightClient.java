@@ -127,7 +127,8 @@ public class ClaudeAiInsightClient implements AiInsightClient {
                     .findFirst()
                     .orElseThrow(() -> new AiGenerationException(AiGenerationException.INVALID_OUTPUT,
                             "AI 응답에 결과가 없습니다."));
-            return new Result<>(value, response.usage().inputTokens(), response.usage().outputTokens());
+            return new Result<>(value, response.usage().inputTokens(), response.usage().outputTokens(),
+                    properties.model());
         } catch (AnthropicInvalidDataException e) {
             throw new AiGenerationException(AiGenerationException.INVALID_OUTPUT,
                     "AI 응답을 해석하지 못했습니다.", e);

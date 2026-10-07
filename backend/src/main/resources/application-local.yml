@@ -5,6 +5,9 @@ spring:
   config:
     activate:
       on-profile: local
+    # 로컬 전용: backend/.env(커밋 금지, .gitignore 대상)의 KEY=VALUE를 환경 변수처럼 읽는다.
+    # 실제 환경 변수가 있으면 그쪽이 우선한다.
+    import: "optional:file:.env[.properties]"
 
   datasource:
     url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/monitoring_db}"

@@ -17,6 +17,7 @@ import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.HttpOptions;
+import com.google.genai.types.HttpRetryOptions;
 import com.google.genai.types.Part;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +41,10 @@ import java.util.Set;
         matchIfMissing = true)
 public class GeminiAiInsightClient implements AiInsightClient {
 
-    private static final int TIMEOUT_MS = 300_000;
+    /** 다른 모델로 넘어가 다시 시도할 만한 실패. 키 오류·안전 차단·길이 초과는 모델을 바꿔도 같으므로 제외한다. */
+    private static final Set<String> FALLBACK_CODES = Set.of(
+            AiGenerationException.RATE_LIMITED, AiGenerationException.UPSTREAM_ERROR,
+            AiGenerationException.INVALID_OUTPUT);
     private static final Set<FinishReason.Known> BLOCKED = Set.of(
             FinishReason.Known.SAFETY, FinishReason.Known.PROHIBITED_CONTENT, FinishReason.Known.BLOCKLIST,
             FinishReason.Known.SPII, FinishReason.Known.RECITATION);
@@ -78,7 +82,23 @@ public class GeminiAiInsightClient implements AiInsightClient {
                 querySchema, QueryAnalysisInsight.class);
     }
 
+    /** 기본 모델부터 차례로 시도한다. 무료 등급 모델은 혼잡(503)·한도(429)·단종(404)이 잦다. */
     private <T> Result<T> call(String system, String user, Map<String, Object> schema, Class<T> outputType) {
+        AiGenerationException last = null;
+        for (String model : properties.modelCandidates()) {
+            try {
+                return attempt(model, system, user, schema, outputType);
+            } catch (AiGenerationException e) {
+                if (!FALLBACK_CODES.contains(e.code())) throw e;
+                log.warn("Gemini model failed; trying next model if any. model={}, code={}", model, e.code());
+                last = e;
+            }
+        }
+        throw last;
+    }
+
+    private <T> Result<T> attempt(String model, String system, String user, Map<String, Object> schema,
+                                  Class<T> outputType) {
         GenerateContentConfig config = GenerateContentConfig.builder()
                 .systemInstruction(Content.fromParts(Part.fromText(system)))
                 .responseMimeType("application/json")
@@ -88,12 +108,12 @@ public class GeminiAiInsightClient implements AiInsightClient {
 
         GenerateContentResponse response;
         try {
-            response = client().models.generateContent(properties.model(), user, config);
+            response = client().models.generateContent(model, user, config);
         } catch (ApiException e) {
             throw translate(e);
         } catch (GenAiIOException e) {
             throw new AiGenerationException(AiGenerationException.UPSTREAM_ERROR,
-                    "AI 서비스에 연결하지 못했습니다.", e);
+                    "AI 서비스에 연결하지 못했거나 응답 시간이 초과되었습니다.", e);
         }
 
         boolean promptBlocked = response.promptFeedback()
@@ -125,7 +145,7 @@ public class GeminiAiInsightClient implements AiInsightClient {
         long output = response.usageMetadata().flatMap(GenerateContentResponseUsageMetadata::candidatesTokenCount)
                 .orElse(0)
                 + response.usageMetadata().flatMap(GenerateContentResponseUsageMetadata::thoughtsTokenCount).orElse(0);
-        return new Result<>(value, input, output);
+        return new Result<>(value, input, output, model);
     }
 
     private static AiGenerationException translate(ApiException e) {
@@ -152,9 +172,13 @@ public class GeminiAiInsightClient implements AiInsightClient {
                 if (!properties.hasApiKey()) {
                     throw new AiGenerationException(AiGenerationException.UNAVAILABLE, "AI API 키가 설정되지 않았습니다.");
                 }
+                // SDK 재시도는 끄고(시도 1회) 모델 전환으로 대신한다. 재시도가 겹치면 대기 시간이 몇 배가 된다.
                 client = Client.builder()
                         .apiKey(properties.activeApiKey())
-                        .httpOptions(HttpOptions.builder().timeout(TIMEOUT_MS).build())
+                        .httpOptions(HttpOptions.builder()
+                                .timeout(properties.requestTimeoutSeconds() * 1000)
+                                .retryOptions(HttpRetryOptions.builder().attempts(1).build())
+                                .build())
                         .build();
             }
             return client;

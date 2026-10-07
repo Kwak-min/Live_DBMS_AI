@@ -3,6 +3,9 @@ package com.example.monitoring.ai.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -13,6 +16,8 @@ import java.util.Locale;
  * @param apiKey Claude(Anthropic) API 키
  * @param geminiApiKey Gemini API 키
  * @param model 비워 두면 제공자 기본 모델
+ * @param fallbackModels 기본 모델이 혼잡·응답 없음·단종이면 차례로 시도할 모델(Gemini만 사용). 비우면 기본 목록
+ * @param requestTimeoutSeconds 모델 호출 1회의 제한 시간
  */
 @ConfigurationProperties(prefix = "monitoring.ai")
 public record AiProperties(
@@ -21,6 +26,8 @@ public record AiProperties(
         String apiKey,
         String geminiApiKey,
         String model,
+        List<String> fallbackModels,
+        int requestTimeoutSeconds,
         String effort,
         int maxOutputTokens,
         String dailyReportZone,
@@ -35,7 +42,8 @@ public record AiProperties(
 ) {
     public static final String GEMINI = "gemini";
     public static final String CLAUDE = "claude";
-    static final String DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+    static final String DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+    static final List<String> DEFAULT_GEMINI_FALLBACKS = List.of("gemini-3.5-flash", "gemini-3.5-flash-lite");
     static final String DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
 
     public AiProperties {
@@ -44,6 +52,13 @@ public record AiProperties(
             throw new IllegalArgumentException("monitoring.ai.provider must be gemini or claude");
         }
         if (model == null || model.isBlank()) model = GEMINI.equals(provider) ? DEFAULT_GEMINI_MODEL : DEFAULT_CLAUDE_MODEL;
+        if (fallbackModels == null || fallbackModels.stream().allMatch(value -> value == null || value.isBlank())) {
+            fallbackModels = GEMINI.equals(provider) ? DEFAULT_GEMINI_FALLBACKS : List.of();
+        } else {
+            fallbackModels = fallbackModels.stream().filter(value -> value != null && !value.isBlank())
+                    .map(String::trim).toList();
+        }
+        if (requestTimeoutSeconds <= 0) requestTimeoutSeconds = GEMINI.equals(provider) ? 90 : 300;
         if (effort == null || effort.isBlank()) effort = "medium";
         if (maxOutputTokens <= 0) maxOutputTokens = 16_000;
         if (dailyReportZone == null || dailyReportZone.isBlank()) dailyReportZone = "UTC";
@@ -68,6 +83,14 @@ public record AiProperties(
 
     public boolean generationAvailable() {
         return enabled && hasApiKey();
+    }
+
+    /** 시도 순서: 기본 모델 다음 대체 모델(중복 제거). */
+    public List<String> modelCandidates() {
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        ordered.add(model);
+        ordered.addAll(fallbackModels);
+        return new ArrayList<>(ordered);
     }
 
     public ZoneId zone() {

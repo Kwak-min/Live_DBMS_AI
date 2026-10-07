@@ -36,7 +36,7 @@ AiReport: `{id:Id,type:DAILY_REPORT|QUERY_ANALYSIS,databaseConfigId:Id,databaseN
 
 - `dailyReport`는 `SUCCEEDED`인 DAILY_REPORT에만, `queryAnalysis`는 `SUCCEEDED`인 QUERY_ANALYSIS에만 있다.
 - `errorCode`는 `FAILED`일 때만 있다: `AI_REFUSED`, `AI_TRUNCATED`, `AI_RATE_LIMITED`, `AI_AUTH_FAILED`, `AI_UPSTREAM_ERROR`, `AI_INVALID_OUTPUT`, `AI_BUSY`, `TARGET_UNREACHABLE`, `CREDENTIALS_UNAVAILABLE`, `INTERRUPTED`(서버 재시작), `INTERNAL_ERROR`. `errorMessage`는 사용자에게 그대로 보여 줘도 되는 한국어 문장이다.
-- `reportDate`는 보고 시간대(`AiStatus.timeZone`, 기본 Asia/Seoul)의 날짜이고 `windowStart`/`windowEnd`는 그 하루의 UTC 경계다.
+- `reportDate`는 보고 시간대(`AiStatus.timeZone`, 기본 Asia/Seoul)의 날짜이고 `windowStart`/`windowEnd`는 그 하루의 UTC 경계다. AI 문장(summary·findings 등)의 시각은 보고 시간대 기준이다.
 
 DailyReport: `{reportDate:Date,timeZone:Text,summary:Text,overallStatus:HEALTHY|WARNING|CRITICAL,healthScore:int(0~100),findings:Finding[],recommendations:Text[],stats:DailyStats,previousDayStats:DailyStats?}`.
 
@@ -58,7 +58,9 @@ QueryAnalysis: `{source:PERFORMANCE_SCHEMA|PROCESSLIST,collectedAt:Time,summary:
 | `AI_PROVIDER` | gemini | `gemini` 또는 `claude` |
 | `GEMINI_API_KEY` | (없음) | Gemini API 키(provider=gemini). 비밀값이며 저장소·문서에 넣지 않는다. |
 | `ANTHROPIC_API_KEY` | (없음) | Claude API 키(provider=claude). 비밀값. |
-| `AI_MODEL` | (비움) | 비우면 제공자 기본 모델: `gemini-3.8-flash` / `claude-opus-5-5` |
+| `AI_MODEL` | (비움) | 비우면 제공자 기본 모델: `gemini-3.6-flash` / `claude-opus-5-5` |
+| `AI_FALLBACK_MODELS` | (비움) | Gemini만 사용. 기본 모델이 혼잡(503)·한도 초과(429)·응답 없음·단종(404)이면 차례로 시도할 모델(쉼표 구분). 비우면 `gemini-3.5-flash,gemini-3.5-flash-lite` |
+| `AI_REQUEST_TIMEOUT_SECONDS` | 0 | 모델 호출 1회 제한 시간. 0이면 Gemini 90초, Claude 300초 |
 | `AI_EFFORT` | medium | Claude만 사용. low / medium / high / xhigh / max |
 | `AI_REFUSAL_FALLBACK` | true | Claude만 사용. 안전 분류기 거절 시 서버 측 대체 모델 재시도 |
 | `AI_DAILY_REPORT_ZONE` | Asia/Seoul | 하루의 기준 시간대 |
@@ -78,11 +80,12 @@ QueryAnalysis: `{source:PERFORMANCE_SCHEMA|PROCESSLIST,collectedAt:Time,summary:
 | 키 발급 | aistudio.google.com → Get API key | console.anthropic.com → 결제 등록 → API Keys |
 | 데이터 사용 | 무료 등급은 입력 내용이 Google 제품 개선에 쓰일 수 있다(유료 등급은 아님) | 학습에 쓰지 않음 |
 
-무료 등급 한도를 넘으면 해당 보고서는 `FAILED`/`AI_RATE_LIMITED`로 끝나며 잠시 뒤 다시 요청하면 된다. 일일 자동 생성 대상이 많으면 한도에 걸릴 수 있으니 `AI_DAILY_REPORT_SCHEDULE_ENABLED=false`로 두고 수동 생성만 써도 된다.
+무료 등급 모델은 혼잡(503)이나 단종이 잦아서 대체 모델로 자동 전환한다. 응답의 `model`은 실제로 결과를 만든 모델이다. 모든 모델이 실패하면 해당 보고서는 `FAILED`(`AI_RATE_LIMITED` 또는 `AI_UPSTREAM_ERROR`)로 끝나며 잠시 뒤 다시 요청하면 된다. 일일 자동 생성 대상이 많으면 한도에 걸릴 수 있으니 `AI_DAILY_REPORT_SCHEDULE_ENABLED=false`로 두고 수동 생성만 써도 된다.
 
 ## 3. 위험 쿼리 분석의 대상 DB 조건
 
 - `performance_schema=ON`이면 `performance_schema.events_statements_summary_by_digest`에서 누적 시간 상위 20개를 읽는다. MariaDB는 기본이 OFF라서 `my.cnf`에 `performance_schema=ON`을 넣고 재시작해야 한다. 모니터링 계정에 `GRANT SELECT ON performance_schema.* TO 'monitor'@'%'`가 필요하다.
+- 계정 관리 명령(GRANT·FLUSH 등), DDL(CREATE·ALTER·DROP 등), information_schema·performance_schema 조회(모니터링 자체 포함)는 표본에서 뺀다.
 - 꺼져 있거나 읽을 수 없으면 `information_schema.PROCESSLIST`에서 지금 실행 중인 문장을 오래 걸린 순으로 읽는다. 다른 세션 문장을 보려면 `PROCESS` 권한이 필요하다.
 - 읽기 전용 조회만 실행하고 대상 DB의 설정·통계를 바꾸지 않는다. 접속은 기존 대상 주소 정책(허용 CIDR·포트·TLS)을 그대로 따른다.
 

@@ -24,6 +24,7 @@ public interface AiInsightClient {
     /** 생성에 쓰는 모델 ID. ai_reports.model에 기록한다. */
     String model();
 
-    record Result<T>(T value, long inputTokens, long outputTokens) {
+    /** @param model 실제로 결과를 만든 모델(대체 모델로 넘어갔으면 그 모델) */
+    record Result<T>(T value, long inputTokens, long outputTokens, String model) {
     }
 }
