@@ -1,0 +1,10 @@
+[
+  {
+    "status": 200,
+    "code": null
+  },
+  {
+    "status": 401,
+    "code": "REFRESH_TOKEN_INVALID"
+  }
+]

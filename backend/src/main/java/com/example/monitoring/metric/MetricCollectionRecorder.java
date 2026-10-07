@@ -11,14 +11,12 @@ import com.example.monitoring.domain.TargetDbStatus;
 import com.example.monitoring.repository.MetricDataRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,12 +27,21 @@ import java.util.UUID;
  * PostgreSQL 저장에 실패하면 예외가 전파되어 이벤트도 남지 않는다(미저장 관측을 Redis에 먼저 보내지 않음).
  */
 @Service
-@RequiredArgsConstructor
 public class MetricCollectionRecorder {
 
     private final EntityManager entityManager;
     private final MetricDataRepository metricDataRepository;
     private final OutboxWriter outboxWriter;
+    private final boolean riskEnabled;
+
+    public MetricCollectionRecorder(EntityManager entityManager, MetricDataRepository metricDataRepository,
+                                    OutboxWriter outboxWriter,
+                                    @Value("${monitoring.risk.enabled:false}") boolean riskEnabled) {
+        this.entityManager = entityManager;
+        this.metricDataRepository = metricDataRepository;
+        this.outboxWriter = outboxWriter;
+        this.riskEnabled = riskEnabled;
+    }
 
     /** @return 저장된 스냅샷. 설정이 바뀌었거나 삭제·비활성화되었으면 empty */
     @Transactional
@@ -64,7 +71,9 @@ public class MetricCollectionRecorder {
 
         outboxWriter.append(UUID.randomUUID(), OutboxEventType.METRIC_COLLECTED, "database:" + targetId,
                 MetricCollectedPayload.from(saved, config.getId(), config.getName()));
-        updateDisplayStatus(targetId, saved);
+        if (!riskEnabled) {
+            updateDisplayStatus(targetId, saved);
+        }
         return Optional.of(saved);
     }
 
@@ -86,11 +95,12 @@ public class MetricCollectionRecorder {
 
     /**
      * DB 목록 응답(B)이 읽는 표시용 상태만 갱신한다. 설정 엔티티 전체를 저장하지 않으므로 B의 설정 변경을 덮어쓰지 않는다.
-     * C의 monitoring_states가 도입되면 B 응답이 그쪽을 읽도록 바꾸고 이 갱신은 제거한다.
+     * 위험도 기능(C)이 켜져 있으면 B 응답이 monitoring_states를 읽으므로 이 갱신을 하지 않는다
+     * ({@link com.example.monitoring.database.service.DatabaseDisplayStatusReader}).
      */
     private void updateDisplayStatus(long databaseConfigId, MetricData metric) {
         boolean success = metric.getCollectionStatus() == CollectionStatus.SUCCESS;
-        LocalDateTime checkedAt = LocalDateTime.ofInstant(metric.getTimestamp(), ZoneId.systemDefault());
+        Instant checkedAt = metric.getTimestamp();
         entityManager.createQuery("""
                         UPDATE DatabaseConfig d
                         SET d.status = :status, d.lastCheckedAt = :checkedAt, d.lastErrorMessage = :error,

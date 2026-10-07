@@ -8,11 +8,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 
 /**
  * 기존 차단 이력(blocked_reasons)을 발생 후 180일 보관 뒤 삭제한다 (docs/integration-operations.md 5절).
- * blocked_at은 이전 코드가 서버 로컬 시각(LocalDateTime)으로 기록했으므로 같은 기준으로 비교한다.
+ * blocked_at은 V7부터 timestamptz다.
  */
 @Slf4j
 @Component
@@ -24,12 +25,12 @@ public class BlockedReasonRetentionScheduler {
 
     private final BlockedReasonRepository blockedReasonRepository;
 
-    private Clock clock = Clock.systemDefaultZone();
+    private Clock clock = Clock.systemUTC();
 
     @Scheduled(cron = "${app.legacy.blocked-reasons-cleanup-cron:0 10 3 * * *}", zone = "UTC")
     public void purgeExpired() {
         try {
-            LocalDateTime cutoff = LocalDateTime.now(clock).minusDays(RETENTION_DAYS);
+            Instant cutoff = clock.instant().minus(Duration.ofDays(RETENTION_DAYS));
             int deleted = blockedReasonRepository.deleteBlockedBefore(cutoff);
             if (deleted > 0) {
                 log.info("Purged {} legacy blocked reason(s) older than {}.", deleted, cutoff);

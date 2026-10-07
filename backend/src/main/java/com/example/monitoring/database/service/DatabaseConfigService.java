@@ -7,6 +7,7 @@ import com.example.monitoring.common.api.ApiId;
 import com.example.monitoring.common.web.AuditRequestContext;
 import com.example.monitoring.database.dto.DatabaseCreateRequest;
 import com.example.monitoring.database.dto.DatabaseResponse;
+import com.example.monitoring.database.service.DatabaseDisplayStatusReader.DisplayStatus;
 import com.example.monitoring.database.dto.DatabaseUpdateRequest;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.TargetDbStatus;
@@ -29,8 +30,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.time.Instant;
+import java.util.Map;
 import java.util.List;
 
 @Service
@@ -45,6 +46,7 @@ public class DatabaseConfigService {
     private final PartBTransactionLocks transactionLocks;
     private final AuditRequestContext auditRequestContext;
     private final MonitoringLifecyclePort lifecyclePort;
+    private final DatabaseDisplayStatusReader displayStatusReader;
 
     @Transactional
     public DatabaseResponse create(DatabaseCreateRequest request) {
@@ -73,7 +75,7 @@ public class DatabaseConfigService {
         DatabaseConfig saved = databaseConfigRepository.saveAndFlush(config);
         recordChange(saved, TargetChangeType.CREATED, AuditAction.DATABASE_CREATED,
                 "Database configuration created");
-        return DatabaseResponse.from(saved);
+        return response(saved);
     }
 
     @Transactional(readOnly = true)
@@ -82,13 +84,14 @@ public class DatabaseConfigService {
         Page<DatabaseConfig> result = enabled == null
                 ? databaseConfigRepository.findByDeletedAtIsNullOrderByIdAsc(PageRequest.of(page, size))
                 : databaseConfigRepository.findByDeletedAtIsNullAndEnabledOrderByIdAsc(enabled, PageRequest.of(page, size));
-        return PageResponse.from(result, DatabaseResponse::from);
+        Map<Long, DisplayStatus> statuses = displayStatusReader.readAll(result.getContent());
+        return PageResponse.from(result, config -> DatabaseResponse.from(config, statuses.get(config.getId())));
     }
 
     @Transactional(readOnly = true)
     public DatabaseResponse get(Long id) {
         ApiId.require(id, "id");
-        return DatabaseResponse.from(findActive(id));
+        return response(findActive(id));
     }
 
     @Transactional
@@ -129,7 +132,11 @@ public class DatabaseConfigService {
                 : (Boolean.TRUE.equals(saved.getEnabled()) ? TargetChangeType.RESUMED : TargetChangeType.PAUSED);
         recordChange(saved, changeType, AuditAction.DATABASE_UPDATED,
                 "Database configuration updated");
-        return DatabaseResponse.from(saved);
+        return response(saved);
+    }
+
+    private DatabaseResponse response(DatabaseConfig config) {
+        return DatabaseResponse.from(config, displayStatusReader.read(config));
     }
 
     @Transactional
@@ -137,7 +144,7 @@ public class DatabaseConfigService {
         ApiId.require(id, "id");
         databaseConfigRepository.findActiveByIdForUpdate(id).ifPresent(config -> {
             config.setEnabled(false);
-            config.setDeletedAt(LocalDateTime.now());
+            config.setDeletedAt(Instant.now());
             config.setConfigVersion(config.getConfigVersion() + 1);
             DatabaseConfig saved = databaseConfigRepository.saveAndFlush(config);
             recordChange(saved, TargetChangeType.DELETED, AuditAction.DATABASE_DELETED,

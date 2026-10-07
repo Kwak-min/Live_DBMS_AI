@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/notifications/push-subscriptions",
+    "body": {
+      "endpoint": "https://evilfcm.googleapis.com.attacker.example/x"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "Please check the request values.",
+      "requestId": "1960406a-3f12-4ab0-8aeb-6da0cb3080de",
+      "fieldErrors": [
+        {
+          "field": "endpoint",
+          "code": "INVALID_VALUE",
+          "message": "The Push endpoint is invalid."
+        }
+      ]
+    }
+  }
+}

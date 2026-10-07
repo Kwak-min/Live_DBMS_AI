@@ -1,0 +1,14 @@
+{
+  "before": {
+    "database_configs": "3",
+    "metric_data": "1",
+    "blocked_reasons": "1",
+    "audit_logs": "1"
+  },
+  "after": {
+    "database_configs": "3",
+    "metric_data": "1",
+    "blocked_reasons": "1",
+    "access_logs": "1"
+  }
+}

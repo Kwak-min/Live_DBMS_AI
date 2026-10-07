@@ -1,0 +1,372 @@
+{
+  "T01": {
+    "title": "일반 가입에 role=ADMIN 주입",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "role 필드를 넣은 가입은 400",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "거절된 가입은 계정을 만들지 않음",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "정상 가입은 201, role=USER",
+        "ok": true,
+        "observed": "201 role=USER"
+      },
+      {
+        "check": "가입은 토큰을 발급하지 않음",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "DB에는 Argon2id hash만 저장",
+        "ok": true,
+        "observed": "role=USER hashPrefix=$argon2id$v=19$m=19456,t=2,p=1"
+      }
+    ],
+    "notes": [],
+    "pending": []
+  },
+  "T02": {
+    "title": "로그인 후 일반 조회·관리 변경",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "USER 로그인 role=USER",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "USER 조회 200",
+        "ok": true,
+        "observed": "200"
+      },
+      {
+        "check": "USER 변경 403 FORBIDDEN",
+        "ok": true,
+        "observed": "403 FORBIDDEN"
+      },
+      {
+        "check": "USER 사용자 관리 조회 403",
+        "ok": true,
+        "observed": "403"
+      },
+      {
+        "check": "ADMIN 변경 201",
+        "ok": true,
+        "observed": "201"
+      }
+    ],
+    "notes": [],
+    "pending": []
+  },
+  "T03": {
+    "title": "만료/변조 JWT, 로그아웃된 sid 재사용",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "정상 토큰 200",
+        "ok": true,
+        "observed": "200"
+      },
+      {
+        "check": "만료 토큰 401 ACCESS_TOKEN_EXPIRED",
+        "ok": true,
+        "observed": "401 ACCESS_TOKEN_EXPIRED"
+      },
+      {
+        "check": "claim만 ADMIN으로 바꾼 토큰은 권한 상승 불가(DB 기준 재확인)",
+        "ok": true,
+        "observed": "401 SESSION_REVOKED"
+      },
+      {
+        "check": "서명 변조 401 INVALID_TOKEN",
+        "ok": true,
+        "observed": "401 INVALID_TOKEN"
+      },
+      {
+        "check": "alg=none 401 INVALID_TOKEN",
+        "ok": true,
+        "observed": "401 INVALID_TOKEN"
+      },
+      {
+        "check": "STOMP handshake 101",
+        "ok": true,
+        "observed": "HTTP/1.1 101 "
+      },
+      {
+        "check": "유효 토큰 STOMP CONNECTED",
+        "ok": true,
+        "observed": "CONNECTED"
+      },
+      {
+        "check": "로그아웃 204",
+        "ok": true,
+        "observed": "204"
+      },
+      {
+        "check": "로그아웃한 세션의 STOMP 연결을 즉시(3초 안) 종료",
+        "ok": true,
+        "observed": "ERROR after 0.0s"
+      },
+      {
+        "check": "두 번째 로그인 STOMP CONNECTED",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "관리자가 사용자를 비활성화하면 그 사용자의 STOMP 연결도 즉시 종료",
+        "ok": true,
+        "observed": "200 ERROR after 0.0s"
+      },
+      {
+        "check": "사용자 재활성화 200(이후 시나리오용)",
+        "ok": true,
+        "observed": "200"
+      },
+      {
+        "check": "로그아웃된 sid의 Access 401 SESSION_REVOKED",
+        "ok": true,
+        "observed": "401 SESSION_REVOKED"
+      },
+      {
+        "check": "폐기된 토큰의 STOMP CONNECT 거절",
+        "ok": true,
+        "observed": "ERROR"
+      }
+    ],
+    "notes": [],
+    "pending": []
+  },
+  "T04": {
+    "title": "Refresh 회전 후 이전 토큰 재사용, 동시 갱신",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "Refresh 200, 쿠키 회전",
+        "ok": true,
+        "observed": "200"
+      },
+      {
+        "check": "이전 Refresh 재사용 401 REFRESH_TOKEN_INVALID",
+        "ok": true,
+        "observed": "401 REFRESH_TOKEN_INVALID"
+      },
+      {
+        "check": "재사용 감지 시 sid 전체 폐기",
+        "ok": true,
+        "observed": "t"
+      },
+      {
+        "check": "회전으로 받은 Access도 SESSION_REVOKED",
+        "ok": true,
+        "observed": "401 SESSION_REVOKED"
+      },
+      {
+        "check": "같은 Refresh 동시 2건: 정확히 1건만 회전(200), 나머지는 재사용으로 401",
+        "ok": true,
+        "observed": "[200, 401]"
+      }
+    ],
+    "notes": [
+      "브라우저 다중 탭 직렬화(Web Locks·BroadcastChannel)는 프론트 담당이며 여기서는 서버의 행 잠금만 확인한다."
+    ],
+    "pending": []
+  },
+  "T05": {
+    "title": "CSRF/Origin 누락·변조, Redis 인증 저장소 중단",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "CSRF 헤더 누락 403 CSRF_INVALID",
+        "ok": true,
+        "observed": "403 CSRF_INVALID"
+      },
+      {
+        "check": "CSRF 값 변조 403 CSRF_INVALID",
+        "ok": true,
+        "observed": "403 CSRF_INVALID"
+      },
+      {
+        "check": "다른 Origin 403 ORIGIN_NOT_ALLOWED",
+        "ok": true,
+        "observed": "403 ORIGIN_NOT_ALLOWED"
+      },
+      {
+        "check": "Origin·Referer 모두 없음 403 ORIGIN_NOT_ALLOWED",
+        "ok": true,
+        "observed": "403 ORIGIN_NOT_ALLOWED"
+      },
+      {
+        "check": "올바른 CSRF·Origin은 200",
+        "ok": true,
+        "observed": "200"
+      },
+      {
+        "check": "Redis 중단 중 CSRF 발급 503",
+        "ok": true,
+        "observed": "503 DEPENDENCY_UNAVAILABLE"
+      },
+      {
+        "check": "Redis 중단 중 로그인 503(보호 생략 없음)",
+        "ok": true,
+        "observed": "503 DEPENDENCY_UNAVAILABLE"
+      },
+      {
+        "check": "Redis 복구 후 CSRF 발급 200",
+        "ok": true,
+        "observed": "200"
+      }
+    ],
+    "notes": [],
+    "pending": []
+  },
+  "T27": {
+    "title": "임의 전달 IP 헤더·허용 밖 DB/Push/Webhook 주소",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "신뢰 proxy가 없으면 X-Forwarded-For를 무시하고 실제 접속 IP 기록",
+        "ok": true,
+        "observed": "audit client_ip=127.0.0.1"
+      },
+      {
+        "check": "허용 밖 DB 주소(10.20.30.40:13306) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 DB 주소(169.254.169.254:13306) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 DB 주소(127.0.0.1:5432) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Slack URL(host) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Slack URL(query) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Slack URL(port) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Slack URL(http) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Push endpoint(host) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Push endpoint(http) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Push endpoint(loopback) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      },
+      {
+        "check": "허용 밖 Push endpoint(suffix) 거절",
+        "ok": true,
+        "observed": "400 VALIDATION_ERROR"
+      }
+    ],
+    "notes": [],
+    "pending": []
+  },
+  "T28": {
+    "title": "baseline 기존 DB의 평문·시간·BLOCKED 데이터 이전",
+    "result": "PASS",
+    "checks": [
+      {
+        "check": "이전 전 백업(pg_dump) 생성",
+        "ok": true,
+        "observed": "11807 bytes"
+      },
+      {
+        "check": "백엔드 1회 실행으로 Flyway 이전 성공",
+        "ok": true,
+        "observed": "exit=0 18s"
+      },
+      {
+        "check": "이전 로그에 평문 계정·비밀번호 없음",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "V2~V7 마이그레이션 모두 적용",
+        "ok": true,
+        "observed": "['1', '2', '3', '4', '5', '6', '7']"
+      },
+      {
+        "check": "평문 username/password 컬럼 제거",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "모든 행 암호문 완성",
+        "ok": true,
+        "observed": "3/3"
+      },
+      {
+        "check": "DB 어디에도 평문 비밀번호 없음",
+        "ok": true,
+        "observed": ""
+      },
+      {
+        "check": "행 수 보존(대상·메트릭·차단 이력·접속 로그)",
+        "ok": true,
+        "observed": "{'database_configs': '3', 'metric_data': '1', 'blocked_reasons': '1', 'access_logs': '1'}"
+      },
+      {
+        "check": "시간 의미 보존: 로컬 09:00 → 같은 순간 UTC",
+        "ok": true,
+        "observed": "2026-09-01 00:00:00 (expected 2026-09-01 00:00:00)"
+      },
+      {
+        "check": "BLOCKED 대상은 비활성으로 이전(자동 활성화 없음)",
+        "ok": true,
+        "observed": "['legacy-blocked', '2026-09-01 00:30:00', 'f']"
+      },
+      {
+        "check": "비활성 대상은 비활성 유지",
+        "ok": true,
+        "observed": "['legacy-disabled', '2026-09-01 01:00:00', 'f']"
+      },
+      {
+        "check": "이전된 비활성 대상은 PAUSED",
+        "ok": true,
+        "observed": "[['1', 'NO_DATA', 't'], ['2', 'PAUSED', 'f'], ['3', 'PAUSED', 'f']]"
+      },
+      {
+        "check": "백업으로 이전 전 상태 복구 가능",
+        "ok": true,
+        "observed": "3"
+      }
+    ],
+    "notes": [
+      "이전 검증 DB legacy_t28_1007124427는 남겨 둔다(수동 확인용). 필요 없으면 DROP DATABASE legacy_t28_1007124427."
+    ],
+    "pending": []
+  }
+}

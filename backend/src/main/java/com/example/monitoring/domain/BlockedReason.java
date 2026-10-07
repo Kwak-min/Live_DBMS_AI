@@ -3,7 +3,7 @@ package com.example.monitoring.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * DB 프로젝트 차단 이력 엔티티.
@@ -56,11 +56,11 @@ public class BlockedReason {
 
     /** 차단 시각 */
     @Column(name = "blocked_at", nullable = false, updatable = false)
-    private LocalDateTime blockedAt;
+    private Instant blockedAt;
 
     /** 해제 시각 (아직 차단 중이면 null) */
     @Column(name = "unblocked_at")
-    private LocalDateTime unblockedAt;
+    private Instant unblockedAt;
 
     /** 해제 승인자 */
     @Column(name = "unblocked_by", length = 100)
@@ -69,7 +69,7 @@ public class BlockedReason {
     @PrePersist
     protected void onCreate() {
         if (blockedAt == null) {
-            blockedAt = LocalDateTime.now();
+            blockedAt = Instant.now();
         }
     }
 

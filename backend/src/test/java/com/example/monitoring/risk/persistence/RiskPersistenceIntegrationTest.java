@@ -111,7 +111,7 @@ class RiskPersistenceIntegrationTest {
     void atomicTransition() {
         transactions.executeWithoutResult(ignored -> persistStaleTransition());
 
-        assertThat(appliedMigrations()).containsExactly("1", "2", "3", "4", "5", "6");
+        assertThat(appliedMigrations()).containsExactly("1", "2", "3", "4", "5", "6", "7");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM processed_events", Long.class)).isOne();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM incidents WHERE status='OPEN'", Long.class)).isOne();
         assertThat(jdbc.queryForObject("SELECT risk_level FROM monitoring_states WHERE database_config_id=?",

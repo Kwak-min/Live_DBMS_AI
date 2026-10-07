@@ -51,7 +51,7 @@ class AuthenticationServiceTest {
         service = new AuthenticationService(userAccountRepository, authSessionRepository, usedRefreshTokenRepository,
                 passwordHashingService, refreshTokenService, accessTokenService,
                 authenticationRateLimitService, auditEventService, sessionSecurity, pushSubscriptions,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), event -> { });
         user = UserAccount.builder().id(7L).email("user@example.com").displayName("user")
                 .passwordHash("hash").role(UserRole.USER).enabled(true).authVersion(1L).build();
     }

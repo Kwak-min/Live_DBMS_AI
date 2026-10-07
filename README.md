@@ -23,6 +23,8 @@ Live_DBMS_AI/
 - [브랜치·커밋·PR 규칙 및 사전 합의](docs/contributing.md)
 - [백엔드 기능 요구사항](docs/backend-functional-requirements.md)
 - [AI 인사이트](docs/ai-insights.md) — 일일 보고서·위험 쿼리 분석 API, 설정, 외부 전송 데이터 범위
+- **[프론트 연동 가이드](docs/frontend-integration-guide.md)** — 화면별 호출 순서, 로그인·STOMP·Push 규칙, 오류 처리
+- [공유 환경 설정](docs/shared-environment.md) — 팀 공용 서버의 HTTPS·환경 변수·VAPID·점검 체크리스트
 
 ## 실행 안내
 

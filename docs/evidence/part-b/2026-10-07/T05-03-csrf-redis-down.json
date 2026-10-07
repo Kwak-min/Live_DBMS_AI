@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/auth/csrf",
+    "body": null
+  },
+  "response": {
+    "status": 503,
+    "body": {
+      "code": "DEPENDENCY_UNAVAILABLE",
+      "message": "인증 저장소를 사용할 수 없습니다.",
+      "requestId": "9c228264-7d54-4808-bc01-da6f0ebb5322",
+      "fieldErrors": []
+    }
+  }
+}

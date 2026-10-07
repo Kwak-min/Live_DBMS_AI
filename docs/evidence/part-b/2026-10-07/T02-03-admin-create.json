@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases",
+    "body": {
+      "name": "t02-1007124427",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "username": "monitor",
+      "password": "***",
+      "enabled": false
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 5,
+      "name": "t02-1007124427",
+      "host": "127.0.0.1",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "enabled": false,
+      "configVersion": 1,
+      "connectionStatus": "UNKNOWN",
+      "lastAttemptAt": null,
+      "lastSuccessAt": null,
+      "createdAt": "2026-10-07T12:44:51.510Z",
+      "updatedAt": "2026-10-07T12:44:51.513Z"
+    }
+  }
+}

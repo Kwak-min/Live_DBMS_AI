@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/auth/refresh",
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "REFRESH_TOKEN_INVALID",
+      "message": "Refresh token이 유효하지 않습니다.",
+      "requestId": "97399a1f-f722-4d99-9c12-81d36ce1a144",
+      "fieldErrors": []
+    }
+  }
+}

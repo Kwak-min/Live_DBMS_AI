@@ -1,0 +1,74 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/databases",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "name": "t02-1007123517",
+          "host": "127.0.0.1",
+          "port": 13306,
+          "databaseName": "sample_app",
+          "enabled": false,
+          "configVersion": 1,
+          "connectionStatus": "UNKNOWN",
+          "lastAttemptAt": null,
+          "lastSuccessAt": null,
+          "createdAt": "2026-10-07T12:35:41.084Z",
+          "updatedAt": "2026-10-07T12:35:41.091Z"
+        },
+        {
+          "id": 2,
+          "name": "t27-1007123517",
+          "host": "127.0.0.1",
+          "port": 13306,
+          "databaseName": "sample_app",
+          "enabled": false,
+          "configVersion": 1,
+          "connectionStatus": "UNKNOWN",
+          "lastAttemptAt": null,
+          "lastSuccessAt": null,
+          "createdAt": "2026-10-07T12:36:53.331Z",
+          "updatedAt": "2026-10-07T12:36:53.332Z"
+        },
+        {
+          "id": 3,
+          "name": "t02-1007123815",
+          "host": "127.0.0.1",
+          "port": 13306,
+          "databaseName": "sample_app",
+          "enabled": false,
+          "configVersion": 1,
+          "connectionStatus": "UNKNOWN",
+          "lastAttemptAt": null,
+          "lastSuccessAt": null,
+          "createdAt": "2026-10-07T12:38:38.565Z",
+          "updatedAt": "2026-10-07T12:38:38.566Z"
+        },
+        {
+          "id": 4,
+          "name": "t27-1007123815",
+          "host": "127.0.0.1",
+          "port": 13306,
+          "databaseName": "sample_app",
+          "enabled": false,
+          "configVersion": 1,
+          "connectionStatus": "UNKNOWN",
+          "lastAttemptAt": null,
+          "lastSuccessAt": null,
+          "createdAt": "2026-10-07T12:39:57.741Z",
+          "updatedAt": "2026-10-07T12:39:57.742Z"
+        }
+      ],
+      "page": 0,
+      "size": 20,
+      "totalElements": 4,
+      "totalPages": 1
+    }
+  }
+}

@@ -32,8 +32,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
@@ -147,7 +145,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
         assertThat(applicationContext.getBean(MonitoringLifecyclePort.class)).isSameAs(lifecycle);
         assertThat(Arrays.stream(flyway.info().applied())
                 .map(info -> info.getVersion().getVersion()))
-                .containsExactly("1", "2", "3", "4", "5", "6");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7");
         assertThat(tableExists("monitoring_states")).isTrue();
         assertThat(tableExists("event_outbox")).isTrue();
         assertThat(tableExists("processed_events")).isTrue();
@@ -498,7 +496,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
             target.setLastSuccessAt(null);
             target.setLastErrorMessage(null);
             if (type == TargetChangeType.DELETED) {
-                target.setDeletedAt(LocalDateTime.ofInstant(normalized(occurredAt), ZoneOffset.UTC));
+                target.setDeletedAt(normalized(occurredAt));
             }
             DatabaseConfig saved = databaseConfigs.saveAndFlush(target);
             audit(saved, type == TargetChangeType.DELETED
@@ -525,7 +523,7 @@ class MonitoringLifecyclePostgresIntegrationTest {
             target.setEnabled(storedEnabled);
             target.setName(storedName);
             if (storedDeleted) {
-                target.setDeletedAt(LocalDateTime.ofInstant(normalized(at(9)), ZoneOffset.UTC));
+                target.setDeletedAt(normalized(at(9)));
             }
             DatabaseConfig saved = databaseConfigs.saveAndFlush(target);
             audit(saved, type == TargetChangeType.DELETED

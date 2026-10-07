@@ -1,0 +1,9 @@
+{
+  "bytes": 11807,
+  "tables": {
+    "database_configs": "3",
+    "metric_data": "1",
+    "blocked_reasons": "1",
+    "audit_logs": "1"
+  }
+}

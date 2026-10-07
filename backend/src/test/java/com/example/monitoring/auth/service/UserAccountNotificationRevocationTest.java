@@ -39,7 +39,7 @@ class UserAccountNotificationRevocationTest {
     @BeforeEach
     void setUp() {
         service = new UserAccountService(users, sessions, passwords, audit, locks, pushSubscriptions,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), event -> { });
     }
 
     @Test

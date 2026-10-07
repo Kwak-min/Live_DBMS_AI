@@ -18,6 +18,7 @@ import com.example.monitoring.notification.session.PushSubscriptionLifecyclePort
 import com.example.monitoring.service.AuditEventService;
 import com.example.monitoring.common.persistence.PartBTransactionLocks;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,7 @@ public class UserAccountService {
     private final PartBTransactionLocks transactionLocks;
     private final PushSubscriptionLifecyclePort pushSubscriptions;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public UserResponse signup(SignupRequest request) {
@@ -144,6 +146,7 @@ public class UserAccountService {
             Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
             authSessionRepository.revokeAllByUserId(user.getId(), now);
             pushSubscriptions.deactivateByUser(user.getId(), now);
+            events.publishEvent(AuthSessionsRevokedEvent.user(user.getId()));
         }
     }
 

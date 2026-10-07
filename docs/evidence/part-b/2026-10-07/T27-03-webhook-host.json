@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/notifications/webhooks",
+    "body": {
+      "name": "t27-1007124427-host",
+      "provider": "SLACK",
+      "url": "<redacted>",
+      "enabled": true
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "Please check the request values.",
+      "requestId": "d010283f-ca7a-4f0b-8c72-c563a5332592",
+      "fieldErrors": [
+        {
+          "field": "url",
+          "code": "INVALID_VALUE",
+          "message": "The Slack webhook URL is invalid."
+        }
+      ]
+    }
+  }
+}

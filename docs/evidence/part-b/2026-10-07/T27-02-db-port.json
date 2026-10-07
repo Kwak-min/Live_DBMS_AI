@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases",
+    "body": {
+      "name": "t27-1007124427-port",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "databaseName": "sample_app",
+      "username": "monitor",
+      "password": "***",
+      "enabled": false
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "대상 DB 포트가 허용 목록에 없습니다.",
+      "requestId": "24a3a158-9fa7-4f89-8c20-c813dca3e7bb",
+      "fieldErrors": []
+    }
+  }
+}

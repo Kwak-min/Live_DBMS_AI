@@ -1,12 +1,11 @@
 package com.example.monitoring.database.dto;
 
+import com.example.monitoring.database.service.DatabaseDisplayStatusReader.DisplayStatus;
 import com.example.monitoring.domain.DatabaseConfig;
 import com.example.monitoring.domain.TargetDbStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 /** Deliberately excludes username, password, and future encrypted fields. */
 public record DatabaseResponse(
@@ -24,16 +23,14 @@ public record DatabaseResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "UTC creation time") Instant createdAt,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "UTC last update time") Instant updatedAt
 ) {
+    /** database_configs 표시 컬럼을 그대로 쓴다(위험도 기능이 꺼진 기본 모드). */
     public static DatabaseResponse from(DatabaseConfig config) {
-        return new DatabaseResponse(config.getId(), config.getName(), config.getHost(), config.getPort(),
-                config.getDatabaseName(), config.getEnabled(), config.getConfigVersion(), config.getStatus(),
-                toInstant(config.getLastCheckedAt()), toInstant(config.getLastSuccessAt()),
-                toInstant(config.getCreatedAt()), toInstant(config.getUpdatedAt()));
+        return from(config, new DisplayStatus(config.getStatus(), config.getLastCheckedAt(), config.getLastSuccessAt()));
     }
 
-    // database_configs remains TIMESTAMP WITHOUT TIME ZONE through V3. Its Java writers use
-    // the JVM default zone, so interpret the legacy values in that same zone at the API boundary.
-    private static Instant toInstant(LocalDateTime value) {
-        return value == null ? null : value.atZone(ZoneId.systemDefault()).toInstant();
+    public static DatabaseResponse from(DatabaseConfig config, DisplayStatus status) {
+        return new DatabaseResponse(config.getId(), config.getName(), config.getHost(), config.getPort(),
+                config.getDatabaseName(), config.getEnabled(), config.getConfigVersion(), status.connectionStatus(),
+                status.lastAttemptAt(), status.lastSuccessAt(), config.getCreatedAt(), config.getUpdatedAt());
     }
 }

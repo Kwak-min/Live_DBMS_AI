@@ -86,6 +86,59 @@ class MigrationSchemaTest {
         }
     }
 
+    @Test
+    @DisplayName("V7 converts legacy database_configs/blocked_reasons local times with LEGACY_TIME_ZONE and leaves no naive timestamp")
+    void v7ConvertsLegacyLocalTimestamps() throws Exception {
+        DataSource dataSource = createDatabase("legacy_v7");
+        Flyway.configure().dataSource(dataSource).target("1").load().migrate();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("""
+                    INSERT INTO database_configs
+                        (collection_interval_seconds, created_at, updated_at, last_checked_at, enabled, host, name,
+                         password, port, status, username)
+                    VALUES (5, '2026-09-28 12:00:00', '2026-09-28 12:30:00', '2026-09-28 13:00:00', true,
+                            '127.0.0.1', 'legacy', 'secret', 13306, 'UP', 'monitor')
+                    """);
+            statement.execute("""
+                    INSERT INTO blocked_reasons (block_type, blocked_at, blocked_by, database_config_id, reason, severity)
+                    VALUES ('MANUAL', '2026-09-28 09:00:00', 'admin', 1, 'legacy block', 'WARNING')
+                    """);
+        }
+
+        flyway(dataSource).migrate();
+
+        assertThatCode(() -> validateEntities(dataSource)).doesNotThrowAnyException();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            // LEGACY_TIME_ZONE=Asia/Seoul(+09:00) 로컬 시각을 같은 순간의 UTC로 바꾼다.
+            try (ResultSet row = statement.executeQuery("""
+                    SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS created_utc,
+                           to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS updated_utc,
+                           to_char(last_checked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS checked_utc
+                    FROM database_configs
+                    """)) {
+                assertThat(row.next()).isTrue();
+                assertThat(row.getString("created_utc")).isEqualTo("2026-09-28 03:00:00");
+                assertThat(row.getString("updated_utc")).isEqualTo("2026-09-28 03:30:00");
+                assertThat(row.getString("checked_utc")).isEqualTo("2026-09-28 04:00:00");
+            }
+            try (ResultSet row = statement.executeQuery(
+                    "SELECT to_char(blocked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM blocked_reasons")) {
+                assertThat(row.next()).isTrue();
+                assertThat(row.getString(1)).isEqualTo("2026-09-28 00:00:00");
+            }
+            try (ResultSet row = statement.executeQuery("""
+                    SELECT string_agg(table_name || '.' || column_name, ',') FROM information_schema.columns
+                    WHERE table_schema = 'public' AND data_type = 'timestamp without time zone'
+                      AND table_name <> 'flyway_schema_history'
+                    """)) {
+                assertThat(row.next()).isTrue();
+                assertThat(row.getString(1)).as("naive timestamp columns left after V7").isNull();
+            }
+        }
+    }
+
     private static Flyway flyway(DataSource dataSource) {
         return Flyway.configure().dataSource(dataSource).load();
     }

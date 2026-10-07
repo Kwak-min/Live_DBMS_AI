@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/databases",
+    "body": {
+      "name": "t27-1007124427-metadata",
+      "host": "169.254.169.254",
+      "port": 13306,
+      "databaseName": "sample_app",
+      "username": "monitor",
+      "password": "***",
+      "enabled": false
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "대상 DB 주소가 허용 CIDR 범위에 없습니다.",
+      "requestId": "22d430a1-e791-40b9-8450-c451b2fc153d",
+      "fieldErrors": []
+    }
+  }
+}

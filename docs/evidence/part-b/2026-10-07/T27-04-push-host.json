@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/notifications/push-subscriptions",
+    "body": {
+      "endpoint": "https://push.evil.example/send/abc"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "code": "VALIDATION_ERROR",
+      "message": "Please check the request values.",
+      "requestId": "0106dadb-011b-4974-b768-9e5a13f4b9c6",
+      "fieldErrors": [
+        {
+          "field": "endpoint",
+          "code": "INVALID_VALUE",
+          "message": "The Push endpoint is invalid."
+        }
+      ]
+    }
+  }
+}

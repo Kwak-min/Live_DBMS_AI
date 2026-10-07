@@ -184,6 +184,22 @@ public final class StompSessionRegistry {
         terminate(sessionId, failure);
     }
 
+    /** 해당 사용자의 모든 STOMP 연결을 SESSION_REVOKED로 닫는다(역할·활성 변경으로 전체 세션 폐기 시). */
+    public void closeUserSessions(long userId) {
+        Set<String> matched = new HashSet<>();
+        lock.lock();
+        try {
+            sessions.forEach((sessionId, state) -> {
+                if (state.principal != null && state.principal.userId() == userId) {
+                    matched.add(sessionId);
+                }
+            });
+        } finally {
+            lock.unlock();
+        }
+        matched.forEach(sessionId -> terminate(sessionId, StompFailure.of("SESSION_REVOKED")));
+    }
+
     public void closeAuthenticationSession(UUID authenticationSessionId) {
         Set<String> matched = new HashSet<>();
         lock.lock();

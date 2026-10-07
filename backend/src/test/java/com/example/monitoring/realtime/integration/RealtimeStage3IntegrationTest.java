@@ -74,7 +74,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
@@ -259,7 +258,7 @@ class RealtimeStage3IntegrationTest {
                 WHERE success = true AND version IS NOT NULL
                 ORDER BY installed_rank
                 """, String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7");
 
         List<Map<String, Object>> columns = jdbc.queryForList("""
                 SELECT column_name, data_type, character_maximum_length, is_nullable
@@ -704,13 +703,13 @@ class RealtimeStage3IntegrationTest {
         jdbc.execute("SELECT setval(pg_get_serial_sequence('database_configs', 'id'), 11, true)");
         DatabaseConfig active = databaseConfigs.saveAndFlush(target(ACTIVE_TARGET_ID, true, null));
         DatabaseConfig disabled = databaseConfigs.saveAndFlush(target(DISABLED_TARGET_ID, false, null));
-        DatabaseConfig deleted = databaseConfigs.saveAndFlush(target(DELETED_TARGET_ID, true, LocalDateTime.now()));
+        DatabaseConfig deleted = databaseConfigs.saveAndFlush(target(DELETED_TARGET_ID, true, Instant.now()));
         assertThat(active.getId()).isEqualTo(ACTIVE_TARGET_ID);
         assertThat(disabled.getId()).isEqualTo(DISABLED_TARGET_ID);
         assertThat(deleted.getId()).isEqualTo(DELETED_TARGET_ID);
     }
 
-    private DatabaseConfig target(long id, boolean enabled, LocalDateTime deletedAt) {
+    private DatabaseConfig target(long id, boolean enabled, Instant deletedAt) {
         DatabaseConfig target = DatabaseConfig.builder()
                 .name("stage3-target")
                 .host("127.0.0.1")
