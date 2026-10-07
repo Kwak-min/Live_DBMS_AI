@@ -49,7 +49,7 @@ B의 기존 상태 조회, 기존 소비/ACK/DLQ 처리 계약은 변경하지 �
 ## 최종 적용·수신 검증
 
 - [ ] 후속 보관 정리 PR의 팀 리뷰와 병합. 이 문서는 병합·공유 배포 승인이 아니다.
-- [ ] 환경별 RISK_ENABLED·REALTIME_ENABLED·NOTIFICATIONS_ENABLED 설정 확인. 세 기능은 기본 false이며, 보관 정리 활성화가 소비 기능을 켜지는 않는다.
+- [ ] 환경별 RISK_ENABLED·REALTIME_ENABLED·NOTIFICATIONS_ENABLED 설정 확인. 세 기능은 기본 false이며, 보관 정리 활성화로 소비 기능이 켜지지 않는다.
 - [ ] 프론트 서비스 워커·권한 UI·개인 Push 구독 연동 후 실제 브라우저/기기에서 개시·복구 수신과 동일 origin 사건 이동 검증(T23).
 - [ ] 지정된 Slack 테스트 수신처에서 실제 개시·복구 수신 검증. 재시도·취소·암호화·세션 폐기는 백엔드 검증과 구분해 기록한다(T24~T25).
 - [ ] A/B와 상태 표시 전환 시점 합의: C 상태 갱신 검증 후 B 조회를 monitoring_states로 전환하고 A 임시 표시 갱신을 제거한다. 합의 전에는 현재 경로를 유지한다.
