@@ -2,7 +2,7 @@ package com.example.monitoring.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "database_configs")
@@ -70,23 +70,24 @@ public class DatabaseConfig {
     @Builder.Default
     private Long configVersion = 1L;
 
-    private LocalDateTime deletedAt;
+    private Instant deletedAt;
 
-    private LocalDateTime lastCheckedAt;
+    private Instant lastCheckedAt;
 
-    private LocalDateTime lastSuccessAt;
+    private Instant lastSuccessAt;
 
     private String lastErrorMessage;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
         if (configVersion == null) {
             configVersion = 1L;
         }
@@ -94,7 +95,7 @@ public class DatabaseConfig {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = Instant.now();
     }
 
     public void storeEncryptedUsername(Integer keyVersion, byte[] nonce, byte[] ciphertext) {

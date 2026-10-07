@@ -17,8 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -90,7 +88,7 @@ public class MetricCollectionRecorder {
      */
     private void updateDisplayStatus(long databaseConfigId, MetricData metric) {
         boolean success = metric.getCollectionStatus() == CollectionStatus.SUCCESS;
-        LocalDateTime checkedAt = LocalDateTime.ofInstant(metric.getTimestamp(), ZoneId.systemDefault());
+        Instant checkedAt = metric.getTimestamp();
         entityManager.createQuery("""
                         UPDATE DatabaseConfig d
                         SET d.status = :status, d.lastCheckedAt = :checkedAt, d.lastErrorMessage = :error,

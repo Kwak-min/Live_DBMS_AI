@@ -29,7 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.time.Instant;
 import java.util.List;
 
@@ -137,7 +136,7 @@ public class DatabaseConfigService {
         ApiId.require(id, "id");
         databaseConfigRepository.findActiveByIdForUpdate(id).ifPresent(config -> {
             config.setEnabled(false);
-            config.setDeletedAt(LocalDateTime.now());
+            config.setDeletedAt(Instant.now());
             config.setConfigVersion(config.getConfigVersion() + 1);
             DatabaseConfig saved = databaseConfigRepository.saveAndFlush(config);
             recordChange(saved, TargetChangeType.DELETED, AuditAction.DATABASE_DELETED,
