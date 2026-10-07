@@ -17,6 +17,7 @@ import com.example.monitoring.notification.session.AuthSessionSecurity;
 import com.example.monitoring.notification.session.PushSubscriptionLifecyclePort;
 import com.example.monitoring.service.AuditEventService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ public class AuthenticationService implements AuthService {
     private final AuthSessionSecurity sessionSecurity;
     private final PushSubscriptionLifecyclePort pushSubscriptions;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public AuthenticationResult login(LoginRequest request) {
@@ -96,6 +98,7 @@ public class AuthenticationService implements AuthService {
         if (!usable) {
             session.revoke(now);
             pushSubscriptions.deactivateBySession(session.getId(), now);
+            events.publishEvent(AuthSessionsRevokedEvent.session(session.getId()));
             throw invalidRefresh();
         }
 
@@ -137,6 +140,7 @@ public class AuthenticationService implements AuthService {
                     session.getId().toString(), null, "User logout succeeded");
         }
         pushSubscriptions.deactivateBySession(session.getId(), now);
+        events.publishEvent(AuthSessionsRevokedEvent.session(session.getId()));
     }
 
     @Override
@@ -193,6 +197,7 @@ public class AuthenticationService implements AuthService {
         Instant now = now();
         session.revoke(now);
         pushSubscriptions.deactivateBySession(session.getId(), now);
+        events.publishEvent(AuthSessionsRevokedEvent.session(session.getId()));
     }
 
     private Instant now() {
